@@ -172,9 +172,3 @@ Errors fall as O(ε²) down to ~1e-8, i.e. qsim's analytic derivatives match. (T
 | Low-level compliance-based contact controller (Sec. III-B, eqs. 6–19) | **Not implemented** |
 | Execution in full dynamics (Drake hydroelastic sim) | **Not done**: planner verification only |
 | Finger gaiting, free object, disturbance/noise studies, other objects | **Not done** (out of scope) |
-
-## Next milestone
-
-1. **Separate Drake dynamic simulation.** A `MultibodyPlant` with a discrete time step (SAP, hydroelastic or point contact), the same hand and hinge (with real viscous damping), and joint PD/impedance control with gravity compensation, torque-limited to the DG-3F-M's 2 N·m. Run the MPC at 10–20 Hz on the measured state, sending `q_d = q_r + u_0` (interpolated) to the impedance controller. Measure: angle error, slippage at φ < 1 mm, contact loss, and torque saturation. Compare κ ∈ {100, 500, 1000}.
-2. **The paper's contact controller** (Sec. III-B): compliant contact model (6), force–motion model (7)–(17), the linear-MPC tracking problem (18) at 100 Hz and the PD law (19), with forces from the planner's λ.
-3. Then continuous rotation with finger gaiting (interpolated nominal grasps, as in the paper's valve task).
