@@ -1,0 +1,5 @@
+initialization: zero controls; cost 134.0351 -> 18.2153 in 11 iterations (small cost decrease), 0.11 s
+object angle at t=N*h: zero-input -0.000 deg, optimized +19.964 deg (goal 20.0)
+finite: X True, U True; max|u| = 0.0500 <= 0.05; input+command bounds respected: True
+max joint-limit violation along X: 0.00e+00 rad
+saved results/step4_trajopt.png

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<!-- This file is forked from dist/index.html in meshcat-dev/meshcat.-->
+<html>
+
+<head>
+  <meta charset=utf-8>
+  <title>Drake MeshCat</title>
+</head>
+
+<body>
+  <div id="status-message">
+    No connection to server.
+  </div>
+  <div id="meshcat-pane">
+  </div>
+
+  <script type="text/javascript" src="meshcat.js"></script>
+  <script>
+    // TODO(#16486): add tooltips to Stats to describe chart contents
+    var stats = new MeshCat.Stats();
+    var realtimeRatePanel = stats.addPanel(
+            new MeshCat.Stats.Panel('rtr%', '#ff8', '#221')
+    );
+    document.body.appendChild(stats.dom);
+    stats.dom.id = "stats-plot";
+    // We want to show the realtime rate panel by default
+    // it is the last element in the stats.dom.children list
+    stats.showPanel(stats.dom.children.length - 1)
+    var viewer = new MeshCat.Viewer(document.getElementById("meshcat-pane"));
+    viewer.animate = function() {
+      viewer.animator.update();
+      if (viewer.needs_render) {
+        viewer.render();
+      }
+    }
+
+    const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+
+    const THREE = MeshCat.THREE;
+
+    // Interactive object dragging (a Drake extension to upstream meshcat).
+    //
+    // Hold Ctrl and drag an object with the left mouse button to grab the point
+    // under the cursor.
+    //
+    // See Meshcat::GetVirtualSpringKinematics() and
+    // multibody::meshcat::MeshcatMouseSpring for further details.
+    class MouseDragController {
+      constructor(viewer) {
+        this.viewer = viewer;
+        // A non-null `object` *is* the "drag in progress" state; see
+        // isActive(). The members below it are meaningful only while it is
+        // non-null, and get cleared alongside it in end().
+        this.object = null;       // The grabbed THREE.Object3D (a leaf mesh).
+        this.pointerId = null;    // The captured pointer, released in end().
+        this.path = null;         // The meshcat "/"-path of the grabbed object.
+        this.pickLocal = null;    // Grab point in the grabbed object's frame.
+        this.targetWorld = null;  // Current drag target, in three.js world.
+        this.plane = new THREE.Plane();  // Drag plane (three.js world coords).
+        this.raycaster = new THREE.Raycaster();
+        // The line from the grab point to the cursor target, and the sphere
+        // marking the grab point. Both are shown only while dragging.
+        // TODO(vincekurtz): consider exposing colors/sizes as a user option.
+        this.line = new THREE.Line(
+          new THREE.BufferGeometry().setAttribute(
+            "position", new THREE.BufferAttribute(new Float32Array(6), 3)),
+          new THREE.LineBasicMaterial({color: 0x000000}));
+        this.marker = new THREE.Mesh(
+          new THREE.SphereGeometry(0.005, 16, 12),
+          new THREE.MeshBasicMaterial({color: 0x000000}));
+        for (const obj of [this.line, this.marker]) {
+          obj.frustumCulled = false;
+          obj.raycast = () => {};  // Don't let it be pickable.
+          obj.visible = false;
+          viewer.scene.add(obj);
+        }
+
+        const domElement = viewer.renderer.domElement;
+        domElement.addEventListener(
+          "pointerdown", (event) => this.start(event), true);
+        domElement.addEventListener(
+          "pointermove", (event) => this.move(event), true);
+        // There are various triggers that should end a drag:
+        //   1. Simple pointer up/cancel.
+        //   2. Loss of the pointer capture, e.g., the browser or OS taking the
+        //      pointer away mid-drag.
+        //   3. Leaving the page entirely (Ctrl-Tab to another tab, Alt-Tab to
+        //      another window, minimizing, ...), which steals the eventual
+        //      pointer up so that no pointer event of any kind arrives. This is
+        //      handled by blur and visibilitychange.
+        domElement.addEventListener("pointerup", () => this.end(), true);
+        domElement.addEventListener("pointercancel", () => this.end(), true);
+        domElement.addEventListener(
+          "lostpointercapture", () => this.end(), true);
+        window.addEventListener("blur", () => this.end());
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) {
+            this.end();
+          }
+        });
+        // On some platforms Ctrl + left-click opens the context menu; suppress
+        // it so it doesn't interrupt a drag.
+        domElement.addEventListener("contextmenu", (event) => {
+          if (event.ctrlKey || this.isActive()) {
+            event.preventDefault();
+          }
+        }, true);
+      }
+
+      // True iff a drag is in progress.
+      isActive() {
+        return this.object !== null;
+      }
+
+      // True iff the viewer currently has an open connection to the server.
+      isConnected() {
+        const conn = this.viewer.connection;
+        return !!conn && conn.readyState === WebSocket.OPEN;
+      }
+
+      // True iff every component of the THREE.Vector3 `v` is finite (neither
+      // NaN nor infinite).
+      static isVectorFinite(v) {
+        return Number.isFinite(v.x) && Number.isFinite(v.y) &&
+               Number.isFinite(v.z);
+      }
+
+      // Reports the event's cursor position as a normalized device coordinate
+      // (NDC) in the range [-1, 1]², with the origin at the center of the
+      // canvas.
+      mouseNdc(event) {
+        const rect = this.viewer.renderer.domElement.getBoundingClientRect();
+        return new THREE.Vector2(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      }
+
+      // Reconstructs the absolute, meshcat, "/"-delimited path of `obj` (e.g.,
+      // /drake/visualizer/model/foo).
+      objectPath(obj) {
+        const names = [];
+        let node = obj;
+        while (node && node !== this.viewer.scene) {
+          if (node.name) {
+            names.push(node.name);
+          }
+          node = node.parent;
+        }
+        names.reverse();
+        return "/" + names.join("/");
+      }
+
+      // Performs ray intersection with the tree rooted at `rootObject`, but
+      // only includes objects that have a fully visible path to `rootObject`.
+      static intersectVisible(raycaster, rootObject, intersects = []) {
+        if (rootObject.visible === false) {
+          return intersects;
+        }
+        if (rootObject.isMesh) {
+          raycaster.intersectObject(rootObject, false, intersects);
+        }
+        for (let i = 0; i < rootObject.children.length; ++i) {
+          MouseDragController.intersectVisible(
+            raycaster, rootObject.children[i], intersects);
+        }
+        return intersects;
+      }
+
+      // Raycasts the cursor against the scene and returns the closest hit on a
+      // visible Drake-published object (under "/drake"), or null. This skips
+      // helpers like the grid, axes, and background, as well as any hidden
+      // geometry layer.
+      raycast(event) {
+        // TODO(vincekurtz): consider allowing users to specify the subtree that
+        // is draggable, rather than hard-coding "/drake".
+        const root = this.viewer.scene_tree.find(["drake"]);
+        this.raycaster.setFromCamera(this.mouseNdc(event), this.viewer.camera);
+        const hits = MouseDragController.intersectVisible(
+          this.raycaster, root.object, []);
+        return hits?.[0] ?? null;
+      }
+
+      // Shows and updates the line drawn from the grasped point `a` to the
+      // cursor target `b`, along with the marker at the grab point. Both points
+      // are in Drake's z-up world frame (the local frame of the scene root, to
+      // which the line is parented).
+      updateVisualization(a, b) {
+        const position = this.line.geometry.attributes.position;
+        position.array[0] = a.x;
+        position.array[1] = a.y;
+        position.array[2] = a.z;
+        position.array[3] = b.x;
+        position.array[4] = b.y;
+        position.array[5] = b.z;
+        position.needsUpdate = true;
+        this.line.visible = true;
+        this.marker.position.set(a.x, a.y, a.z);
+        this.marker.visible = true;
+        this.viewer.set_dirty();
+      }
+
+      // Sends the current drag state to the server. While a drag is active this
+      // is called every animation frame, so that the attachment point keeps
+      // tracking the (possibly moving) object even when the mouse is still.
+      send() {
+        const conn = this.viewer.connection;
+        if (this.isActive()) {
+          // The attachment point follows the object; the target follows the
+          // cursor. Convert both into Drake's z-up world frame, which is the
+          // local frame of the (rotated) meshcat scene root.
+          const anchor = this.viewer.scene.worldToLocal(
+            this.object.localToWorld(this.pickLocal.clone()));
+          const target =
+            this.viewer.scene.worldToLocal(this.targetWorld.clone());
+          // Never report a non-finite endpoint; a NaN reaching the plant as a
+          // drag force poisons the simulation. move() keeps the target finite,
+          // so this generally means the anchor went bad, i.e., the grabbed
+          // object's own pose has diverged -- in which case there is nothing
+          // left to drag. End the drag, which sends the end-of-drag message
+          // below rather than leaving the last good drag in force.
+          if (!MouseDragController.isVectorFinite(anchor) ||
+              !MouseDragController.isVectorFinite(target)) {
+            console.warn("Meshcat: ending a drag of '" + this.path +
+                         "' because its endpoints are no longer finite; the " +
+                         "grabbed object's pose may have diverged.");
+            this.end();
+            return;
+          }
+          // Draw the drag locally and stream the endpoints to the server.
+          this.updateVisualization(anchor, target);
+          conn.send(MeshCat.msgpack.encode({
+            type: "mouse_drag",
+            name: this.path,
+            drag_anchor: [anchor.x, anchor.y, anchor.z],
+            drag_target: [target.x, target.y, target.z],
+          }));
+        } else {
+          // An empty payload tells the server the drag has ended.
+          conn.send(MeshCat.msgpack.encode(
+            {type: "mouse_drag", name: "", drag_anchor: [],
+             drag_target: []}));
+        }
+      }
+
+      start(event) {
+        // A drag requires Ctrl + the left button, over a Drake object.
+        if (!event.ctrlKey || event.button !== 0) {
+          return;
+        }
+        // Dragging only means something if the server is there to act on it,
+        // so with no connection decline the drag.
+        if (!this.isConnected()) {
+          return;
+        }
+        const hit = this.raycast(event);
+        if (!hit) {
+          return;  // Nothing grabbable under the cursor; let the controls
+                   // handle it.
+        }
+        // Capture the pointer before committing any state, so that a failure
+        // needs no unwinding. This isn't expected to fail for a genuine
+        // pointerdown -- the pointer is active by construction and the canvas
+        // is in the document -- but without capture we could neither reliably
+        // track the cursor once it leaves the canvas nor see the release that
+        // ends the drag, so decline the drag rather than start a degraded one.
+        try {
+          this.viewer.renderer.domElement.setPointerCapture(event.pointerId);
+        } catch (e) {
+          return;  // Let the controls handle the event, as in the no-hit case.
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        this.object = hit.object;
+        this.pointerId = event.pointerId;
+        this.path = this.objectPath(hit.object);
+        this.pickLocal = hit.object.worldToLocal(hit.point.clone());
+        this.targetWorld = hit.point.clone();
+        // The drag plane passes through the grab point and faces the camera, so
+        // the target tracks the cursor in the screen plane.
+        const normal = new THREE.Vector3();
+        this.viewer.camera.getWorldDirection(normal);
+        this.plane.setFromNormalAndCoplanarPoint(normal, hit.point);
+        // Suspend orbit/pan controls for the duration of the drag.
+        this.viewer.controls.enabled = false;
+        this.viewer.renderer.domElement.style.cursor = "grabbing";
+        this.send();
+      }
+
+      move(event) {
+        if (!this.isActive()) {
+          // Not dragging: when Ctrl is held, hint that the object under the
+          // cursor is grabbable by showing a hand ("grab") cursor.
+          const domElement = this.viewer.renderer.domElement;
+          if (event.ctrlKey && this.isConnected() && this.raycast(event)) {
+            domElement.style.cursor = "grab";
+          } else {
+            domElement.style.cursor = "";
+          }
+          return;
+        }
+        event.preventDefault();
+        this.raycaster.setFromCamera(this.mouseNdc(event), this.viewer.camera);
+        const target = new THREE.Vector3();
+        // With pointer capture, it is possible to create an adversarial plane
+        // intersection query that produces bad results. Only use the new value
+        // if it not NaNs (otherwise, use the old).
+        if (this.raycaster.ray.intersectPlane(this.plane, target) &&
+            MouseDragController.isVectorFinite(target)) {
+          this.targetWorld = target;
+        }
+        this.send();
+      }
+
+      // Ends an in-progress drag.
+      end() {
+        if (!this.isActive()) {
+          return;
+        }
+        const pointerId = this.pointerId;
+        // Clearing `object` first is what makes this idempotent: the
+        // releasePointerCapture() below dispatches lostpointercapture, which
+        // re-enters here and must take the early return above.
+        this.object = null;
+        this.pointerId = null;
+        this.path = null;
+        this.pickLocal = null;
+        this.targetWorld = null;
+        this.line.visible = false;
+        this.marker.visible = false;
+        this.viewer.controls.enabled = true;
+        this.viewer.renderer.domElement.style.cursor = "";
+        // pointerup and pointercancel release the capture automatically, so
+        // this is redundant on those paths. It is *not* redundant when the drag
+        // is ended by loss of focus or visibility: no pointer event is involved
+        // there, so nothing would otherwise release the capture and the canvas
+        // would go on receiving this pointer's events after the drag is over.
+        // The guard covers the paths where the capture is already gone
+        // (releasing a pointer that isn't captured throws).
+        if (this.viewer.renderer.domElement.hasPointerCapture(pointerId)) {
+          this.viewer.renderer.domElement.releasePointerCapture(pointerId);
+        }
+        this.viewer.set_dirty();
+        this.send();
+      }
+    }
+
+    const mouseDrag = new MouseDragController(viewer);
+
+    // Gamepad support - first check if the gamepad feature is available.
+    const gamepads_supported = !!navigator.getGamepads;
+    if (!gamepads_supported) {
+      if (!window.isSecureContext) {
+        console.warn("Gamepads are not supported outside of a secure context. "
+        + "See https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts"
+        + " for details. Some browsers support localhost and allowlists.");
+      } else {
+        console.warn("Gamepads are not supported in this browser session.");
+      }
+    }
+    // See https://beej.us/blog/data/javascript-gamepad/ for a tutorial.
+    var last_gamepad = {};
+    function handle_gamepads() {
+      let gamepads = navigator.getGamepads();
+      let gamepad = {};
+      for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i] === null || !gamepads[i].connected) {
+          continue;
+        }
+
+        // Only send a subset of the available information. Also, the floating
+        // point values are not constant; they are constantly changing in the
+        // least significant digits even when the gamepad is untouched by the
+        // user. We truncate the floating point values to two significant
+        // digits to reject this noise.
+        gamepad = {
+          'index': gamepads[i].index,
+          'button_values': gamepads[i].buttons.map(
+            a => clamp(Math.round(a.value * 100) / 100, 0, 1)),
+          'axes': gamepads[i].axes.map(
+            a => clamp(Math.round(a * 100) / 100, -1, 1)),
+        };
+        break;  // Just take the first connected gamepad.
+      }
+      if (this.connection && this.connection.readyState == WebSocket.OPEN &&
+        JSON.stringify(gamepad) !== JSON.stringify(last_gamepad)) {
+        this.connection.send(MeshCat.msgpack.encode(
+          { 'type': 'gamepad', 'name': '', 'gamepad': gamepad }));
+        last_gamepad = gamepad;
+      }
+    }
+
+    function animate() {
+      stats.begin();
+      viewer.animate()
+      stats.end();
+      if (gamepads_supported) {
+        handle_gamepads();
+      }
+      if (mouseDrag.isActive()) {
+        // Re-send every frame so the attachment point (and marker) keep
+        // tracking the object as the simulation advances, even if the mouse is
+        // stationary.
+        mouseDrag.send();
+      }
+      requestAnimationFrame(animate);
+    }
+
+    // TODO(#16486): Replace this function with more robust custom command
+    //  handling in Meshcat
+    function handle_message(ws_message) {
+      let decoded = viewer.decode(ws_message);
+      if (decoded.type == "realtime_rate") {
+        // Note: we expect to receive messages at a fixed "rate" so that each
+        // update to the panel represents a fixed duration of time. This code
+        // doesn't define whether that time is in simulation or wall time.
+
+        // Convert realtime rate to percentage so it is easier to read.
+        realtimeRatePanel.update(decoded.rate*100, 100);
+      } else if (decoded.type == "show_realtime_rate") {
+        stats.dom.style.display = decoded.show ? "block" : "none";
+      } else {
+        viewer.handle_command(decoded)
+      }
+    }
+
+    requestAnimationFrame( animate );
+    // Set background to match the legacy ``drake_visualizer`` application from
+    // Drake's days past.
+    viewer.set_property(['Background', '<object>'], "top_color",
+                        [.95, .95, 1.0])
+    viewer.set_property(['Background', '<object>'], "bottom_color",
+                        [.32, .32, .35])
+    // Set the initial view looking up the y-axis.
+    viewer.set_property(['Cameras', 'default', 'rotated', '<object>'],
+                        "position", [0.0, 1.0, 3.0])
+
+    // With meshcat's upgrade of three.js, the default lighting conditions are
+    // no longer appropriate. Meshcat has boosted them slightly to account for
+    // a hidden change in three.js's lighting math, but it's not enough. The
+    // ambient and directional lights don't decay with distance, but point and
+    // spotlight do. The default lighting is now dominated by the non-decaying
+    // light sources. So, we're going to significantly bump the decaying sources
+    // to give them illuminating power and increase image contrast. These values
+    // don't live in upstream meshcat because in some of meshcat's test/*.html
+    // files, these defaults look horrible..
+    viewer.set_property(["Lights", "SpotLight", "<object>"], "intensity", 30);
+    viewer.set_property(["Lights", "PointLightNegativeX", "<object>"],
+                        "intensity", 25);
+    viewer.set_property(["Lights", "PointLightPositiveX", "<object>"],
+                        "intensity", 25);
+    viewer.set_property(["Lights", "AmbientLight", "<object>"], "intensity",
+                        0.3);
+    viewer.set_property(["Lights", "FillLight", "<object>"], "intensity", 0.5);
+
+    <!-- CONNECTION BLOCK BEGIN -->
+    // The lifespan of the server may be much shorter than this visualizer
+    // client. We'd like the user to not have to explicitly reload when they
+    // start a new server. So, we automatically try to reconnect at some given
+    // rate. However, due to the split of visualizer state between server and
+    // client, simply reconnecting may leave the *existing* visualizer in a
+    // strange state with various stale artifacts. So, when we detect a
+    // *reconnection*, we simply reload the page, so that every *meaningful*
+    // connection is accompanied by a fresh client state. Upon loading the
+    // page, it can accept a connection. After that first connection, any
+    // new connection is interpreted as a signal to reload.
+    var accepting_connections = true;
+    status_dom = document.getElementById("status-message");
+    // When the connection closes, try creating a new connection automatically.
+    function make_connection(url, reconnect_ms) {
+      try {
+        connection = new WebSocket(url);
+        connection.binaryType = "arraybuffer";
+        connection.onmessage = (msg) => handle_message(msg);
+        connection.onopen = (evt) => {
+          if (!accepting_connections) location.reload();
+          accepting_connections = false;
+          // Immediately trigger the callback so that connection is sufficient
+          // to register a pose (otherwise, it doesn't happen until *something*
+          // else happens to trigger a render). Invoking the render callback is
+          // always safe because even if `tracked_camera` isn't enabled, the
+          // Viewer has a non-null no-op callback set.
+          viewer.render_callback();
+        };
+        connection.onclose = function(evt) {
+          status_dom.style.display = "block";
+          mouseDrag.end();
+          if (do_reconnect) {
+            // Immediately schedule an attempt to reconnect.
+            setTimeout(() => {make_connection(url, reconnect_ms);}, reconnect_ms);
+          }
+        }
+        viewer.connection = connection
+      } catch (e) {
+        console.info("Not connected to MeshCat websocket server: ", e);
+        if (do_reconnect) {
+          setTimeout(() => {make_connection(url, reconnect_ms);}, reconnect_ms);
+        }
+      }
+    }
+
+    const queryString = window.location.search;
+    const urlParams = new URLSearchParams(queryString);
+    reconnect_ms = parseInt(urlParams.get('reconnect_ms')) || 1000;
+    var do_reconnect = reconnect_ms > 0;
+    if (do_reconnect) {
+      status_dom.textContent = "No connection to server. Attempting to reconnect...";
+    }
+
+    const tracked_camera = urlParams.get('tracked_camera');
+    if (tracked_camera) {
+      viewer.set_render_callback(
+        `(function() {
+            var prior_message = new Uint8Array();
+            return function() {
+              if (this.connection.readyState == 1 /* OPEN */) {
+                var new_message = msgpack.encode({
+                  'type': 'camera_pose',
+                  'camera_pose': this.camera.matrixWorld.elements,
+                  // Changing projection matrices *can* lead to is_perspective()
+                  // returning some null-like value; we treat it as not
+                  // perspective.
+                  'is_perspective': this.is_perspective() == null ?
+                                        false : this.is_perspective()
+                });
+                // Only transmit the message when it changes.
+                if (!(new_message.length === prior_message.length &&
+                      new_message.every((x, i) => x === prior_message[i]))) {
+                  this.connection.send(new_message);
+                  prior_message = new_message;
+                }
+              }
+            }
+         })()`);
+    }
+
+    url = location.toString();
+    url = url.replace("http://", "ws://")
+    url = url.replace("https://", "wss://")
+    url = url.replace("/index.html", "/")
+    url = url.replace("/meshcat.html", "/")
+    make_connection(url, reconnect_ms);
+
+    // Per our meshcat.h docs, using XR when offline is not supported. Adding
+    // offline support might be possible by moving the 'webxr' and 'controller'
+    // handling outside of the CONNECTION BLOCK comment region and adding
+    // meshcat_manual_test coverage.
+
+    const webxrMode = urlParams.get('webxr');
+    if (webxrMode) {
+        viewer.handle_command({
+          type: "enable_webxr",
+          mode: webxrMode
+        });
+    }
+
+    const controllerMode = urlParams.get('controller');
+    if (controllerMode === "on") {
+      viewer.handle_command({
+        type: "visualize_vr_controller"
+      });
+    }
+    <!-- CONNECTION BLOCK END -->
+
+  </script>
+
+  <style>
+    body {
+      margin: 0;
+    }
+
+    #meshcat-pane {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      /* Avoid selecting page text when double-clicking to grab an object. */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #status-message{
+      width: 50vw;
+      text-align: center;
+      font-weight: bold;
+      background-color: yellow;
+      position: fixed;
+      left: 25%;
+      display: none;
+    }
+
+    #stats-plot {
+      display: none;
+    }
+  </style>
+  <script id="embedded-json"></script>
+</body>
+
+</html>

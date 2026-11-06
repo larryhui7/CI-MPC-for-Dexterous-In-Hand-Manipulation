@@ -1,0 +1,6 @@
+# Python dependencies (Python 3.13, macOS arm64). The C++ contact model
+# (quasistatic_simulator) is built by setup.sh against Drake 1.58.0.
+drake==1.58.0
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2

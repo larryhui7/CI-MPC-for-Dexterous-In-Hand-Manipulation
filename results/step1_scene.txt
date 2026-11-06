@@ -1,0 +1,69 @@
+generated model files:
+  dir: /Users/larryhui/Desktop/test/build/models
+  hand_planning: /Users/larryhui/Desktop/test/build/models/hand_planning.urdf
+  hand_visual: /Users/larryhui/Desktop/test/build/models/hand_visual.urdf
+  object: /Users/larryhui/Desktop/test/build/models/object.sdf
+  directives: /Users/larryhui/Desktop/test/build/models/directives.yaml
+
+plant: nq=13 nv=13 actuators=0 (hand=0, object=0)
+
+state x (index: joint, axis, limits [rad], x0):
+  x[ 0] j_dg_1_1  axis=[0. 0. 1.] [-1.571, +1.571]  x0=+0.0000
+  x[ 1] j_dg_1_2  axis=[1. 0. 0.] [-1.571, +1.571]  x0=+0.0000
+  x[ 2] j_dg_1_3  axis=[ 0. -1.  0.] [-0.000, +2.810]  x0=+0.7080
+  x[ 3] j_dg_1_4  axis=[ 0. -1.  0.] [-1.571, +1.868]  x0=+1.5706
+  x[ 4] j_dg_2_1  axis=[0. 0. 1.] [-2.129, +1.571]  x0=-1.0472
+  x[ 5] j_dg_2_2  axis=[-1.  0.  0.] [-1.571, +1.571]  x0=+0.0000
+  x[ 6] j_dg_2_3  axis=[0. 1. 0.] [-0.000, +2.810]  x0=+0.7080
+  x[ 7] j_dg_2_4  axis=[0. 1. 0.] [-1.571, +1.868]  x0=+1.5706
+  x[ 8] j_dg_3_1  axis=[0. 0. 1.] [-1.571, +2.129]  x0=+1.0472
+  x[ 9] j_dg_3_2  axis=[-1.  0.  0.] [-1.571, +1.571]  x0=+0.0000
+  x[10] j_dg_3_3  axis=[0. 1. 0.] [-0.000, +2.810]  x0=+0.7080
+  x[11] j_dg_3_4  axis=[0. 1. 0.] [-1.571, +1.868]  x0=+1.5706
+  x[12] object_yaw axis=[0. 0. 1.] unlimited  x0=+0.0000
+state dimension nx = 13 (12 hand + 1 object) verified
+
+fingertip frames (world position at x0):
+  l_dg_1_tip: origin=[0.0634 0.     0.1967]  tip-sphere center=[0.052 0.    0.21 ]  azimuth=+0.0 deg
+  l_dg_2_tip: origin=[-0.0317  0.0549  0.1967]  tip-sphere center=[-0.026  0.045  0.21 ]  azimuth=+120.0 deg
+  l_dg_3_tip: origin=[-0.0317 -0.0549  0.1967]  tip-sphere center=[-0.026 -0.045  0.21 ]  azimuth=-120.0 deg
+
+collision geometry (planning model):
+  object       Sphere(radius=0.04)  p_BG=[0. 0. 0.]
+  l_dg_1_3     Sphere(radius=0.0125)  p_BG=[0.012 0.    0.   ]
+  l_dg_1_3     Sphere(radius=0.0125)  p_BG=[0.034 0.    0.   ]
+  l_dg_1_4     Sphere(radius=0.0112)  p_BG=[0.016 0.    0.   ]
+  l_dg_1_tip   Sphere(radius=0.011)  p_BG=[0.0175 0.     0.    ]
+  l_dg_2_3     Sphere(radius=0.0125)  p_BG=[-0.012  0.     0.   ]
+  l_dg_2_3     Sphere(radius=0.0125)  p_BG=[-0.034  0.     0.   ]
+  l_dg_2_4     Sphere(radius=0.0112)  p_BG=[-0.016  0.     0.   ]
+  l_dg_2_tip   Sphere(radius=0.011)  p_BG=[-0.0175  0.      0.    ]
+  l_dg_3_3     Sphere(radius=0.0125)  p_BG=[-0.012  0.     0.   ]
+  l_dg_3_3     Sphere(radius=0.0125)  p_BG=[-0.034  0.     0.   ]
+  l_dg_3_4     Sphere(radius=0.0112)  p_BG=[-0.016  0.     0.   ]
+  l_dg_3_tip   Sphere(radius=0.011)  p_BG=[-0.0175  0.      0.    ]
+
+signed distances hand-object at x0 [mm]:
+  l_dg_1_3    +30.51
+  l_dg_1_3    +35.43
+  l_dg_1_4    +26.24
+  l_dg_1_tip   +1.00
+  l_dg_2_3    +30.51
+  l_dg_2_3    +35.43
+  l_dg_2_4    +26.24
+  l_dg_2_tip   +1.00
+  l_dg_3_3    +30.51
+  l_dg_3_3    +35.43
+  l_dg_3_4    +26.24
+  l_dg_3_tip   +1.00
+
+clearance object <-> official collision meshes at x0 [mm] (vertex-based, negative = penetration):
+  l_dg_1_3    +33.40
+  l_dg_1_4    +19.94
+  l_dg_1_tip   +6.89
+  l_dg_2_3    +33.40
+  l_dg_2_4    +19.94
+  l_dg_2_tip   +6.89
+  l_dg_3_3    +33.40
+  l_dg_3_4    +19.94
+  l_dg_3_tip   +6.89

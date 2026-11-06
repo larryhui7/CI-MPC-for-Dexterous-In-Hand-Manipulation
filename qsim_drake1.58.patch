@@ -1,0 +1,414 @@
+diff --git a/quasistatic_simulator_cpp/CMakeLists.txt b/quasistatic_simulator_cpp/CMakeLists.txt
+index b798ab7..8b9256d 100644
+--- a/quasistatic_simulator_cpp/CMakeLists.txt
++++ b/quasistatic_simulator_cpp/CMakeLists.txt
+@@ -30,54 +30,30 @@
+ # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ # POSSIBILITY OF SUCH DAMAGE.
+ 
+-cmake_minimum_required(VERSION 3.14)
++cmake_minimum_required(VERSION 3.20)
+ project(quasistatic_simulator)
+ 
+-# N.B. This is a temporary flag. It only really applies to Linux, as Mac
+-# does not need X11.
+-option(RUN_X11_TESTS "Run tests that require X11" OFF)
+-
+-include(CTest)
+-
++# [cimpc patch] Build only the libraries and Python bindings against a Drake
++# binary install (headers) whose libdrake.so is ABI-identical to the pip wheel.
+ find_package(drake CONFIG REQUIRED)
+-
+-find_package(PythonInterp ${drake_PYTHON_VERSION} MODULE REQUIRED EXACT)
+-
+-find_program(PYTHON_EXECUTABLE NAMES python3
+-        PATHS "${FIND_PYTHON_EXECUTABLE_PATHS}"
+-        NO_DEFAULT_PATH
+-        )
+-
+-execute_process(COMMAND ${PYTHON_EXECUTABLE}-config --exec-prefix
+-        OUTPUT_VARIABLE PYTHON_EXEC_PREFIX
+-        OUTPUT_STRIP_TRAILING_WHITESPACE
+-        )
+-list(APPEND CMAKE_PREFIX_PATH "${PYTHON_EXEC_PREFIX}")
+-find_package(PythonLibs ${drake_PYTHON_VERSION} MODULE REQUIRED EXACT)
+-
+-get_filename_component(PYTHONPATH
+-        "${drake_DIR}/../../python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages"
+-        REALPATH
+-        )
++set(drake_PYTHON_VERSION ${QSIM_PYTHON_VERSION})
++find_package(Python3 ${QSIM_PYTHON_VERSION} EXACT REQUIRED COMPONENTS Interpreter Development)
++set(PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
++set(PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
+ 
+ set(CMAKE_CXX_EXTENSIONS OFF)
+-set(CMAKE_CXX_STANDARD 17)
++set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ 
+-# My packages.
+ find_package(pybind11 CONFIG REQUIRED)
+ find_package(yaml-cpp REQUIRED)
+-find_package(GTest REQUIRED)
+ 
+ include(GNUInstallDirs)
+ 
+ add_subdirectory(qsim)
+ add_subdirectory(bindings)
+ add_subdirectory(diffcp)
+-add_subdirectory(examples)
+-add_subdirectory(tests)
+-
+ 
+ install(EXPORT ${CMAKE_PROJECT_NAME}
+         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${CMAKE_PROJECT_NAME}
+diff --git a/quasistatic_simulator_cpp/bindings/qsim_cpp.cc b/quasistatic_simulator_cpp/bindings/qsim_cpp.cc
+index 8013529..6d182ea 100644
+--- a/quasistatic_simulator_cpp/bindings/qsim_cpp.cc
++++ b/quasistatic_simulator_cpp/bindings/qsim_cpp.cc
+@@ -114,6 +114,26 @@ PYBIND11_MODULE(qsim_cpp, m) {
+         .def("get_contact_results", &Class::get_contact_results,
+              py::return_value_policy::reference_internal)
+         .def("get_contact_results_copy", &Class::GetContactResultsCopy)
++        // [cimpc patch] pydrake now uses nanobind, so drake::ContactResults
++        // cannot cross into Python; export plain arrays instead:
++        // (body_A names, body_B names, phi [m], f_A_W [N] = force on body A,
++        //  p_WC [m] = midpoint of the witness points).
++        .def("get_contact_arrays",
++             [](const Class& self) {
++               const auto& cr = self.get_contact_results();
++               const auto& plant = self.get_plant();
++               const int n = cr.num_point_pair_contacts();
++               std::vector<std::string> a(n), b(n);
++               Eigen::MatrixX3d f(n, 3), p(n, 3);
++               for (int i = 0; i < n; i++) {
++                 const auto& info = cr.point_pair_contact_info(i);
++                 a[i] = plant.get_body(info.bodyA_index()).name();
++                 b[i] = plant.get_body(info.bodyB_index()).name();
++                 f.row(i) = -info.contact_force().transpose();
++                 p.row(i) = info.contact_point().transpose();
++               }
++               return std::make_tuple(a, b, self.get_contact_phi(), f, p);
++             })
+         .def("get_sim_params", &Class::get_sim_params,
+              py::return_value_policy::reference_internal)
+         .def("get_robot_stiffness", &Class::GetRobotStiffness,
+diff --git a/quasistatic_simulator_cpp/diffcp/log_barrier_solver.cc b/quasistatic_simulator_cpp/diffcp/log_barrier_solver.cc
+index b9bd674..810eeee 100644
+--- a/quasistatic_simulator_cpp/diffcp/log_barrier_solver.cc
++++ b/quasistatic_simulator_cpp/diffcp/log_barrier_solver.cc
+@@ -157,7 +157,13 @@ void LogBarrierSolverBase::Solve(const Eigen::Ref<const Eigen::MatrixXd>& Q,
+                                  const bool use_free_solver,
+                                  Eigen::VectorXd* v_star_ptr) const {
+   VectorXd v(Q.rows());
+-  SolvePhaseOne(G, e, use_free_solver, &v);
++  if (G.rows() == 0) {
++    // [cimpc patch] No contact constraints: every v is strictly feasible, and
++    // the phase-1 program (min s, no cone constraints) would be unbounded.
++    v.setZero();
++  } else {
++    SolvePhaseOne(G, e, use_free_solver, &v);
++  }
+ 
+   try {
+     SolveOneNewtonStep(Q, b, G, e, kappa_max, &v);
+diff --git a/quasistatic_simulator_cpp/diffcp/log_barrier_solver.h b/quasistatic_simulator_cpp/diffcp/log_barrier_solver.h
+index 0f228e7..4517911 100644
+--- a/quasistatic_simulator_cpp/diffcp/log_barrier_solver.h
++++ b/quasistatic_simulator_cpp/diffcp/log_barrier_solver.h
+@@ -101,7 +101,7 @@ class LogBarrierSolverBase {
+   // Hyperparameters for Newton's method.
+   static constexpr int newton_steps_limit_{50};
+   // Considered converge if Newton's decrement / 2 < tol_.
+-  static constexpr double tol_{1e-6};
++  static constexpr double tol_{1e-12};
+ 
+   static constexpr int gradient_steps_limit_{500};
+ 
+diff --git a/quasistatic_simulator_cpp/diffcp/socp_derivatives.cc b/quasistatic_simulator_cpp/diffcp/socp_derivatives.cc
+index 30ba0e3..7ea12e3 100644
+--- a/quasistatic_simulator_cpp/diffcp/socp_derivatives.cc
++++ b/quasistatic_simulator_cpp/diffcp/socp_derivatives.cc
+@@ -16,8 +16,8 @@ MatrixXd CalcC(const Eigen::Ref<const Eigen::VectorXd>& v) {
+   MatrixXd V(n, n);
+   V.setZero();
+   V.row(0) = v;
+-  V(seq(1, Eigen::last), 0) = v.tail(n - 1);
+-  V(seq(1, Eigen::last), seq(1, Eigen::last)).diagonal().setConstant(v[0]);
++  V(seq(1, Eigen::placeholders::last), 0) = v.tail(n - 1);
++  V(seq(1, Eigen::placeholders::last), seq(1, Eigen::placeholders::last)).diagonal().setConstant(v[0]);
+   return V;
+ }
+ 
+@@ -32,8 +32,8 @@ MatrixXd CalcA12CLambda(const Eigen::Ref<const Eigen::MatrixXd>& A12,
+   const auto m = C_lambda_list[0].rows();
+   for (int i = 0; i < n_c; i++) {
+     auto i_start = i * m;
+-    A12C_lambda(Eigen::all, seqN(i_start, m)) =
+-        A12(Eigen::all, seqN(i_start, m)) * C_lambda_list[i];
++    A12C_lambda(Eigen::placeholders::all, seqN(i_start, m)) =
++        A12(Eigen::placeholders::all, seqN(i_start, m)) * C_lambda_list[i];
+   }
+ 
+   return A12C_lambda;
+@@ -99,7 +99,7 @@ void SocpDerivatives::UpdateProblem(
+   DzDe_ = MatrixXd::Zero(n_z, n_c * m);
+   for (int i = 0; i < n_c_active; i++) {
+     const auto idx = lambda_star_active_indices_[i];
+-    DzDe_(Eigen::all, seqN(idx * m, m)) =
++    DzDe_(Eigen::placeholders::all, seqN(idx * m, m)) =
+         -A.block(0, n_z + i * m, n_z, m) * C_lambda_list[i];
+     //    cout << "i: " << i << " idx: "<< idx << endl << C_lambda_list[i] <<
+     //    endl;
+diff --git a/quasistatic_simulator_cpp/qsim/batch_quasistatic_simulator.cc b/quasistatic_simulator_cpp/qsim/batch_quasistatic_simulator.cc
+index 271a278..3e867a6 100644
+--- a/quasistatic_simulator_cpp/qsim/batch_quasistatic_simulator.cc
++++ b/quasistatic_simulator_cpp/qsim/batch_quasistatic_simulator.cc
+@@ -322,9 +322,9 @@ BatchQuasistaticSimulator::CalcBundledABcTrj(
+   for (int t = 0; t < T; t++) {
+     int i_start = t * n_samples;
+     auto u_batch_t = SampleGaussianMatrix(n_samples, u_trj.row(t), std_u);
+-    x_batch(Eigen::seqN(i_start, n_samples), Eigen::all).rowwise() =
++    x_batch(Eigen::seqN(i_start, n_samples), Eigen::placeholders::all).rowwise() =
+         x_trj.row(t);
+-    u_batch(Eigen::seqN(i_start, n_samples), Eigen::all) = u_batch_t;
++    u_batch(Eigen::seqN(i_start, n_samples), Eigen::placeholders::all) = u_batch_t;
+   }
+ 
+   auto [x_next_batch, A_batch, B_batch, is_valid_batch] =
+@@ -488,9 +488,9 @@ BatchQuasistaticSimulator::CalcBcLstsq(
+ 
+   // Data centering.
+   MatrixXd dx =
+-      x_next_batch(idx_valid, Eigen::all).rowwise() - x_next_mean.transpose();
++      x_next_batch(idx_valid, Eigen::placeholders::all).rowwise() - x_next_mean.transpose();
+   MatrixXd du =
+-      u_batch(idx_valid, Eigen::all).rowwise() - u_nominal.transpose();
++      u_batch(idx_valid, Eigen::placeholders::all).rowwise() - u_nominal.transpose();
+ 
+   auto prog = drake::solvers::MathematicalProgram();
+   auto B = prog.NewContinuousVariables(n_x, n_u, "B");
+diff --git a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
+index 649faf1..e671c31 100644
+--- a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
++++ b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
+@@ -47,10 +47,17 @@ void CreateMbp(drake::systems::DiagramBuilder<double>* builder,
+   // TODO(pang): add package paths from yaml file? Hard-coding paths is clearly
+   //  not the solution...
+   parser.package_map().Add("quasistatic_simulator", GetQsimModelsPath());
+-  parser.package_map().Add(
+-      "drake_manipulation_models",
+-      drake::MaybeGetDrakePath().value() + "/manipulation/models");
+-  parser.package_map().Add("iiwa_controller", GetRoboticsUtilitiesModelsPath());
++  // [cimpc patch] Optional packages; recent Drake no longer ships
++  // manipulation/models and the robotics_utilities submodule is optional.
++  const auto drake_models = drake::MaybeGetDrakePath().value_or("") +
++                            "/manipulation/models";
++  if (std::filesystem::is_directory(drake_models)) {
++    parser.package_map().Add("drake_manipulation_models", drake_models);
++  }
++  if (std::filesystem::is_directory(GetRoboticsUtilitiesModelsPath())) {
++    parser.package_map().Add("iiwa_controller",
++                             GetRoboticsUtilitiesModelsPath());
++  }
+ 
+   // Objects.
+   // Use a Set to sort object names.
+@@ -207,7 +214,7 @@ QuasistaticSimulator::QuasistaticSimulator(
+     if (n_v == 6 && n_q == 7) {
+       const auto body_indices = plant_->GetBodyIndices(model);
+       DRAKE_THROW_UNLESS(body_indices.size() == 1);
+-      DRAKE_THROW_UNLESS(plant_->get_body(body_indices.at(0)).is_floating());
++      DRAKE_THROW_UNLESS(plant_->get_body(body_indices.at(0)).is_floating_base_body());
+       is_3d_floating_[model] = true;
+     } else {
+       is_3d_floating_[model] = false;
+@@ -377,7 +384,7 @@ void QuasistaticSimulator::CalcQAndTauH(
+ void AddPointPairContactInfoFromForce(
+     const ContactPairInfo<double>& cpi,
+     const Eigen::Ref<const Vector3d>& f_Bc_W,
+-    drake::multibody::ContactResults<double>* contact_results) {
++    std::vector<drake::multibody::PointPairContactInfo<double>>* infos) {
+   drake::geometry::PenetrationAsPointPair<double> papp;
+   papp.id_A = cpi.id_A;
+   papp.id_B = cpi.id_B;
+@@ -385,7 +392,7 @@ void AddPointPairContactInfoFromForce(
+   papp.p_WCb = cpi.p_WCb;
+   papp.nhat_BA_W = cpi.nhat_BA_W;
+   Vector3d p_WC = (papp.p_WCa + papp.p_WCb) / 2;
+-  contact_results->AddContactInfo(
++  infos->push_back(
+       drake::multibody::PointPairContactInfo<double>(
+           cpi.body_A_idx, cpi.body_B_idx, f_Bc_W, p_WC, 0, 0, papp));
+ }
+@@ -396,7 +403,7 @@ void QuasistaticSimulator::CalcContactResultsQp(
+     const double h, drake::multibody::ContactResults<double>* contact_results) {
+   const auto n_c = contact_info_list.size();
+   DRAKE_ASSERT(beta_star.size() == n_c * n_d);
+-  contact_results->Clear();
++  std::vector<drake::multibody::PointPairContactInfo<double>> infos;
+   int i_beta = 0;
+   for (int i_c = 0; i_c < n_c; i_c++) {
+     const auto& cpi = contact_info_list[i_c];
+@@ -411,10 +418,12 @@ void QuasistaticSimulator::CalcContactResultsQp(
+     f_Ac_W /= h;
+ 
+     // Assemble Contact info.
+-    AddPointPairContactInfoFromForce(cpi, -f_Ac_W, contact_results);
++    AddPointPairContactInfoFromForce(cpi, -f_Ac_W, &infos);
+ 
+     i_beta += n_d;
+   }
++  *contact_results =
++      drake::multibody::ContactResults<double>(std::move(infos));
+ }
+ 
+ void QuasistaticSimulator::CalcContactResultsSocp(
+@@ -423,7 +432,7 @@ void QuasistaticSimulator::CalcContactResultsSocp(
+     drake::multibody::ContactResults<double>* contact_results) {
+   const auto n_c = contact_info_list.size();
+   DRAKE_ASSERT(n_c == lambda_star.size());
+-  contact_results->Clear();
++  std::vector<drake::multibody::PointPairContactInfo<double>> infos;
+ 
+   for (int i_c = 0; i_c < n_c; i_c++) {
+     const auto& cpi = contact_info_list[i_c];
+@@ -434,8 +443,10 @@ void QuasistaticSimulator::CalcContactResultsSocp(
+     f_Ac_W /= h;
+ 
+     // Assemble Contact info.
+-    AddPointPairContactInfoFromForce(cpi, -f_Ac_W, contact_results);
++    AddPointPairContactInfoFromForce(cpi, -f_Ac_W, &infos);
+   }
++  *contact_results =
++      drake::multibody::ContactResults<double>(std::move(infos));
+ }
+ 
+ void QuasistaticSimulator::Step(const ModelInstanceIndexToVecMap& q_a_cmd_dict,
+@@ -502,6 +513,7 @@ void QuasistaticSimulator::Step(const ModelInstanceIndexToVecMap& q_a_cmd_dict,
+ 
+       ForwardSocp(Q, tau_h, J_list, phi, params, &q_next_dict, &v_star,
+                   &lambda_star_list, &e_list);
++      contact_phi_ = phi;  // [cimpc patch]
+ 
+       if (params.calc_contact_forces) {
+         CalcContactResultsSocp(cjc_->get_contact_pair_info_list(),
+@@ -548,7 +560,7 @@ void QuasistaticSimulator::CalcPyramidMatrices(
+   J.resize(n_f, n_v_);
+   phi_constraints.resize(n_f);
+   for (int i_c = 0; i_c < n_c; i_c++) {
+-    J(Eigen::seqN(i_c * n_d, n_d), Eigen::all) = J_list[i_c];
++    J(Eigen::seqN(i_c * n_d, n_d), Eigen::placeholders::all) = J_list[i_c];
+     phi_constraints(Eigen::seqN(i_c * n_d, n_d)).setConstant((*phi_ptr)(i_c));
+   }
+ 
+@@ -753,6 +765,26 @@ void QuasistaticSimulator::ForwardLogIcecream(
+                               params.log_barrier_weight,
+                               params.use_free_solvers, v_star_ptr);
+ 
++  // [cimpc patch] Smoothed contact impulses = implicit dual of the log
++  // barrier. With w_i = J_i v + [phi_i / (h mu_i), 0, 0], stationarity of
++  // kappa * (0.5 v'Qv - tau_h'v) - sum_i log(w0^2 - |wt|^2) gives
++  // Q v - tau_h = sum_i J_i' lambda_i,
++  // lambda_i = 2 / (kappa (w0^2 - |wt|^2)) [w0, -w1, -w2].
++  contact_phi_ = phi;
++  if (params.calc_contact_forces) {
++    std::vector<Eigen::VectorXd> lambda_list(n_c);
++    for (int i = 0; i < n_c; i++) {
++      Eigen::Vector3d w = J_list.at(i) * (*v_star_ptr);
++      w[0] += phi_h_mu[i];
++      const double d = w[0] * w[0] - w.tail(2).squaredNorm();
++      lambda_list[i] = 2 / (params.log_barrier_weight * d) *
++                       Eigen::Vector3d(w[0], -w[1], -w[2]);
++    }
++    CalcContactResultsSocp(cjc_->get_contact_pair_info_list(), lambda_list, h,
++                           &contact_results_);
++    contact_results_.set_plant(plant_);
++  }
++
+   // Update q_dict.
+   UpdateQdictFromV(*v_star_ptr, params, &q_dict);
+ 
+@@ -1174,7 +1206,7 @@ Eigen::MatrixXd QuasistaticSimulator::CalcDfDxQp(
+     }
+   }
+ 
+-  Dv_nextDq += Dv_nextDe(Eigen::all, lambda_star_active_indices) * De_active_Dq;
++  Dv_nextDq += Dv_nextDe(Eigen::placeholders::all, lambda_star_active_indices) * De_active_Dq;
+ 
+   /*----------------------------------------------------------------*/
+   if (!lambda_star_active_indices.empty()) {
+@@ -1233,7 +1265,7 @@ Eigen::MatrixXd QuasistaticSimulator::CalcDfDxSocp(
+     active_indices_into_e.push_back(i_c * m);
+   }
+ 
+-  Dv_nextDq += Dv_nextDe(Eigen::all, active_indices_into_e) * De_active_Dq;
++  Dv_nextDq += Dv_nextDe(Eigen::placeholders::all, active_indices_into_e) * De_active_Dq;
+   /*----------------------------------------------------------------*/
+   if (!lambda_star_active_indices.empty()) {
+     const auto q = GetQVecFromDict(q_next_dict);
+@@ -1473,13 +1505,13 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertRowVToQdot(
+       const Eigen::Vector4d& Q_WB = q_dict.at(model).head(4);
+ 
+       // Rotation.
+-      M_qdot(idx_q_model.head(4), Eigen::all) =
+-          CalcNW2Qdot(Q_WB) * M_v(idx_v_model.head(3), Eigen::all);
++      M_qdot(idx_q_model.head(4), Eigen::placeholders::all) =
++          CalcNW2Qdot(Q_WB) * M_v(idx_v_model.head(3), Eigen::placeholders::all);
+       // Translation.
+-      M_qdot(idx_q_model.tail(3), Eigen::all) =
+-          M_v(idx_v_model.tail(3), Eigen::all);
++      M_qdot(idx_q_model.tail(3), Eigen::placeholders::all) =
++          M_v(idx_v_model.tail(3), Eigen::placeholders::all);
+     } else {
+-      M_qdot(idx_q_model, Eigen::all) = M_v(idx_v_model, Eigen::all);
++      M_qdot(idx_q_model, Eigen::placeholders::all) = M_v(idx_v_model, Eigen::placeholders::all);
+     }
+   }
+ 
+@@ -1498,14 +1530,14 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertColVToQdot(
+       const Eigen::Vector4d& Q_WB = q_dict.at(model).head(4);
+ 
+       // Rotation.
+-      M_qdot(Eigen::all, idx_q_model.head(4)) =
+-          M_v(Eigen::all, idx_v_model.head(3)) * CalcNQdot2W(Q_WB);
++      M_qdot(Eigen::placeholders::all, idx_q_model.head(4)) =
++          M_v(Eigen::placeholders::all, idx_v_model.head(3)) * CalcNQdot2W(Q_WB);
+ 
+       // Translation.
+-      M_qdot(Eigen::all, idx_q_model.tail(3)) =
+-          M_v(Eigen::all, idx_v_model.tail(3));
++      M_qdot(Eigen::placeholders::all, idx_q_model.tail(3)) =
++          M_v(Eigen::placeholders::all, idx_v_model.tail(3));
+     } else {
+-      M_qdot(Eigen::all, idx_q_model) = M_v(Eigen::all, idx_v_model);
++      M_qdot(Eigen::placeholders::all, idx_q_model) = M_v(Eigen::placeholders::all, idx_v_model);
+     }
+   }
+ 
+diff --git a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.h b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.h
+index 84f4281..9c8c612 100644
+--- a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.h
++++ b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.h
+@@ -154,6 +154,10 @@ class QuasistaticSimulator {
+     return contact_results_;
+   }
+ 
++  // [cimpc patch] Signed distances of the contact pairs in the last Step
++  // (icecream modes), ordered like get_contact_results().
++  const Eigen::VectorXd& get_contact_phi() const { return contact_phi_; }
++
+   void update_sim_params(const QuasistaticSimParameters& new_params) {
+     sim_params_ = new_params;
+   }
+@@ -499,6 +503,7 @@ class QuasistaticSimulator {
+   mutable const drake::geometry::QueryObject<drake::AutoDiffXd>*
+       query_object_ad_{nullptr};
+   mutable drake::multibody::ContactResults<double> contact_results_;
++  Eigen::VectorXd contact_phi_;  // [cimpc patch]
+ 
+   // MBP introspection.
+   int n_v_a_{0};  // number of actuated DOFs.

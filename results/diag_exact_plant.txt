@@ -1,0 +1,12 @@
+DIAGNOSTIC: plan with the smoothed model (kappa = 100), execute u_0 in the exact (unsmoothed) CQDC SOCP. Still quasi-dynamic, not a physics simulation.
+t [s]  theta [deg]  min tip phi [mm]
+  0.0      +0.000      1.00
+  0.5     +20.854      0.25
+  1.0     +20.530      0.03
+  1.5     +20.128      0.06
+  2.0     +20.057      0.00
+  2.5     +19.979     -0.00
+  3.0     +19.979     -0.00
+  3.5     +19.979     -0.00
+  4.0     +19.979     -0.00
+final angle +19.979 deg (goal 20.0); final error -0.021 deg

@@ -1,0 +1,13 @@
+PLANNER VERIFICATION: MPC actions are executed through the same smoothed quasi-dynamic CQDC model used for planning (not a physical simulation).
+
+object angle: start 0.00 deg, final 19.998 deg, goal 20.0 deg
+tracking error: initial -20.00 deg -> final -0.002 deg; max |err| over last 1 s 0.002 deg; first |err| < 5 deg at t = 0.3 s
+zero-input baseline final angle: -0.0000 deg (final error -20.00 deg)
+finite: x True, u True, cost True
+max |u| = 0.0500 (bound 0.05); max joint-limit violation = 0.00e+00 rad
+DDP iterations per step: mean 5.8, max 20 (first solve 11); solve time mean 50.3 ms, max 163.7 ms
+termination reasons: {np.str_('max_iter'): 1, np.str_('small cost decrease'): 39}
+contact: 100.00% of total |dtheta| accrued in steps with a tip at phi < 3 mm; pairs with phi >= 3 mm carry 37.5% of sum |tau|
+tip phi range [0.40, 4.85] mm; max tip force 99.4 N
+reproducibility: max |difference| between two runs = 0.0e+00
+saved results/step5_mpc.png
