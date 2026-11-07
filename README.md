@@ -1,6 +1,6 @@
 # Contact-implicit MPC for Dexterous In-hand Manipulation using DG3F-M for constrained rotation
 
-Reproducing **high-level contact-implicit MPC** of Jiang et al.,
+Reproducing high-level contact-implicit MPC of Jiang et al.,
 *Contact-Implicit Model Predictive Control for Dexterous In-hand Manipulation*
 (IROS 2024), on a Tesollo DG-3F-M hand rotating a sphere about a fixed vertical
 hinge by some angle. We have made some modifications namely not using Croccodyl. 
