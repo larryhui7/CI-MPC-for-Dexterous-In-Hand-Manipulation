@@ -5,7 +5,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_dg_mount.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_dg_mount.dae" />
       </geometry>
     </visual>
     </link>
@@ -18,7 +18,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_dg_base.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_dg_base.dae" />
       </geometry>
     </visual>
     </link>
@@ -37,7 +37,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_1_1.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_1_1.dae" />
       </geometry>
     </visual>
     </link>
@@ -58,10 +58,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_1_2.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_1_2.dae" />
       </geometry>
     </visual>
-    </link>
+    <collision name="l_dg_1_2_sphere0"><origin xyz="0.0 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_2_sphere1"><origin xyz="0.012 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_2_sphere2"><origin xyz="0.024 0 0.012" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_2_sphere3"><origin xyz="0.024 0 0.027" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_1_2" type="revolute">
     <origin xyz="0 0 0.0405" rpy="0 0 0" />
     <parent link="l_dg_1_1" />
@@ -79,10 +79,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_1_3.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_1_3.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_1_3_sphere0"><origin xyz="0.012 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_3_sphere1"><origin xyz="0.034 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_1_3_sphere0"><origin xyz="0.008 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_3_sphere1"><origin xyz="0.019 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_3_sphere2"><origin xyz="0.03 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_3_sphere3"><origin xyz="0.041 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_1_3" type="revolute">
     <origin xyz="0.0242 0 0.029" rpy="0 0 0" />
     <parent link="l_dg_1_2" />
@@ -100,10 +100,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_1_4.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_1_4.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_1_4_sphere0"><origin xyz="0.016 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_1_4_sphere0"><origin xyz="0.016 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_4_sphere1"><origin xyz="0.005 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_4_sphere2"><origin xyz="0.027 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_1_4" type="revolute">
     <origin xyz="0.0434 0 0" rpy="0 0 0" />
     <parent link="l_dg_1_3" />
@@ -121,10 +121,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_1_tip.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_1_tip.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_1_tip_sphere0"><origin xyz="0.0175 0 0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_1_tip_sphere0"><origin xyz="0.0175 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_1_tip_sphere1"><origin xyz="0.007 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_1_tip" type="fixed">
     <origin xyz="0.0313 0 0" rpy="0 0 0" />
     <parent link="l_dg_1_4" />
@@ -140,7 +140,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_1.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_1.dae" />
       </geometry>
     </visual>
     </link>
@@ -161,10 +161,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_2.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_2.dae" />
       </geometry>
     </visual>
-    </link>
+    <collision name="l_dg_2_2_sphere0"><origin xyz="-0.0 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_2_sphere1"><origin xyz="-0.012 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_2_sphere2"><origin xyz="-0.024 0 0.012" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_2_sphere3"><origin xyz="-0.024 0 0.027" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_2_2" type="revolute">
     <origin xyz="0 0 0.0405" rpy="0 0 0" />
     <parent link="l_dg_2_1" />
@@ -182,10 +182,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_3.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_3.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_2_3_sphere0"><origin xyz="-0.012 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_3_sphere1"><origin xyz="-0.034 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_2_3_sphere0"><origin xyz="-0.008 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_3_sphere1"><origin xyz="-0.019 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_3_sphere2"><origin xyz="-0.03 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_3_sphere3"><origin xyz="-0.041 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_2_3" type="revolute">
     <origin xyz="-0.0242 0 0.029" rpy="0 0 0" />
     <parent link="l_dg_2_2" />
@@ -203,10 +203,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_4.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_4.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_2_4_sphere0"><origin xyz="-0.016 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_2_4_sphere0"><origin xyz="-0.016 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_4_sphere1"><origin xyz="-0.005 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_4_sphere2"><origin xyz="-0.027 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_2_4" type="revolute">
     <origin xyz="-0.0434 0 0" rpy="0 0 0" />
     <parent link="l_dg_2_3" />
@@ -224,10 +224,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_tip.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_tip.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_2_tip_sphere0"><origin xyz="-0.0175 0 0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_2_tip_sphere0"><origin xyz="-0.0175 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_2_tip_sphere1"><origin xyz="-0.007 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_2_tip" type="fixed">
     <origin xyz="-0.0313 0 0" rpy="0 0 0" />
     <parent link="l_dg_2_4" />
@@ -243,7 +243,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_1.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_1.dae" />
       </geometry>
     </visual>
     </link>
@@ -264,10 +264,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_2.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_2.dae" />
       </geometry>
     </visual>
-    </link>
+    <collision name="l_dg_3_2_sphere0"><origin xyz="-0.0 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_2_sphere1"><origin xyz="-0.012 0 0.01" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_2_sphere2"><origin xyz="-0.024 0 0.012" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_2_sphere3"><origin xyz="-0.024 0 0.027" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_3_2" type="revolute">
     <origin xyz="0 0 0.0405" rpy="0 0 0" />
     <parent link="l_dg_3_1" />
@@ -285,10 +285,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_3.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_3.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_3_3_sphere0"><origin xyz="-0.012 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_3_sphere1"><origin xyz="-0.034 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_3_3_sphere0"><origin xyz="-0.008 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_3_sphere1"><origin xyz="-0.019 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_3_sphere2"><origin xyz="-0.03 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_3_sphere3"><origin xyz="-0.041 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0125" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_3_3" type="revolute">
     <origin xyz="-0.0242 0 0.029" rpy="0 0 0" />
     <parent link="l_dg_3_2" />
@@ -306,10 +306,10 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_4.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_4.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_3_4_sphere0"><origin xyz="-0.016 0 0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_3_4_sphere0"><origin xyz="-0.016 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_4_sphere1"><origin xyz="-0.005 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_4_sphere2"><origin xyz="-0.027 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.0112" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_3_4" type="revolute">
     <origin xyz="-0.0434 0 0" rpy="0 0 0" />
     <parent link="l_dg_3_3" />
@@ -327,13 +327,13 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="file:///Users/larryhui/Desktop/test/dg3fm/meshes/l_23_tip.dae" />
+        <mesh filename="file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/dg3fm/meshes/l_23_tip.dae" />
       </geometry>
     </visual>
-    <collision name="l_dg_3_tip_sphere0"><origin xyz="-0.0175 0 0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
+    <collision name="l_dg_3_tip_sphere0"><origin xyz="-0.0175 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision><collision name="l_dg_3_tip_sphere1"><origin xyz="-0.007 0 0.0" rpy="0 0 0" /><geometry><sphere radius="0.011" /></geometry><drake:proximity_properties><drake:mu_static value="1.0" /><drake:mu_dynamic value="1.0" /></drake:proximity_properties></collision></link>
   <joint name="j_dg_3_tip" type="fixed">
     <origin xyz="-0.0313 0 0" rpy="0 0 0" />
     <parent link="l_dg_3_4" />
     <child link="l_dg_3_tip" />
   </joint>
-<drake:collision_filter_group name="hand_self"><drake:member link="l_dg_mount" /><drake:member link="l_dg_base" /><drake:member link="l_dg_1_1" /><drake:member link="l_dg_1_2" /><drake:member link="l_dg_1_3" /><drake:member link="l_dg_1_4" /><drake:member link="l_dg_1_tip" /><drake:member link="l_dg_2_1" /><drake:member link="l_dg_2_2" /><drake:member link="l_dg_2_3" /><drake:member link="l_dg_2_4" /><drake:member link="l_dg_2_tip" /><drake:member link="l_dg_3_1" /><drake:member link="l_dg_3_2" /><drake:member link="l_dg_3_3" /><drake:member link="l_dg_3_4" /><drake:member link="l_dg_3_tip" /><drake:ignored_collision_filter_group name="hand_self" /></drake:collision_filter_group></robot>
+<drake:collision_filter_group name="finger_1"><drake:member link="l_dg_1_1" /><drake:member link="l_dg_1_2" /><drake:member link="l_dg_1_3" /><drake:member link="l_dg_1_4" /><drake:member link="l_dg_1_tip" /><drake:ignored_collision_filter_group name="finger_1" /></drake:collision_filter_group><drake:collision_filter_group name="finger_2"><drake:member link="l_dg_2_1" /><drake:member link="l_dg_2_2" /><drake:member link="l_dg_2_3" /><drake:member link="l_dg_2_4" /><drake:member link="l_dg_2_tip" /><drake:ignored_collision_filter_group name="finger_2" /></drake:collision_filter_group><drake:collision_filter_group name="finger_3"><drake:member link="l_dg_3_1" /><drake:member link="l_dg_3_2" /><drake:member link="l_dg_3_3" /><drake:member link="l_dg_3_4" /><drake:member link="l_dg_3_tip" /><drake:ignored_collision_filter_group name="finger_3" /></drake:collision_filter_group></robot>

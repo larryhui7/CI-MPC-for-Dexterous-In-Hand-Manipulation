@@ -19,36 +19,6 @@
         <geometry><sphere><radius>0.04</radius></sphere></geometry>
         <material><diffuse>0.2 0.4 0.9 0.6</diffuse></material>
       </visual>
-      <visual name="marker0">
-        <pose>0.04000 0.00000 0 0 0 0.00000</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
-      <visual name="marker1">
-        <pose>0.02000 0.03464 0 0 0 1.04720</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
-      <visual name="marker2">
-        <pose>-0.02000 0.03464 0 0 0 2.09440</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
-      <visual name="marker3">
-        <pose>-0.04000 0.00000 0 0 0 3.14159</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
-      <visual name="marker4">
-        <pose>-0.02000 -0.03464 0 0 0 4.18879</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
-      <visual name="marker5">
-        <pose>0.02000 -0.03464 0 0 0 5.23599</pose>
-        <geometry><box><size>0.006 0.006 0.064</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>
     </link>
     <!-- Unactuated: effort 0 => Drake attaches no actuator to this joint. -->
     <joint name="object_yaw" type="revolute">

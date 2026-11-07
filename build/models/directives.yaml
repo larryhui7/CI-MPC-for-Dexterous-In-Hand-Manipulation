@@ -1,7 +1,7 @@
 directives:
 - add_model:
     name: hand
-    file: file:///Users/larryhui/Desktop/test/build/models/hand_planning.urdf
+    file: file:///Users/larryhui/Desktop/CI-MPC-for-Dexterous-In-Hand-Manipulation/build/models/hand_planning.urdf
 - add_weld:
     parent: world
     child: hand::l_dg_mount

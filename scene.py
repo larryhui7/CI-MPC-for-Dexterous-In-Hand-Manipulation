@@ -1,4 +1,4 @@
-"""Scene: Tesollo DG-3F-M welded to the world + a sphere on a vertical revolute joint.
+"""Scene: Tesollo DG-3F-M welded to the world + a sphere on a vertical revolute joint. ROTZ
 
 Generated model files (written to <build_dir>/models, never hand-edited):
   hand_planning.urdf  official kinematics/inertias, collision = spheres, no visuals
@@ -19,7 +19,7 @@ import numpy as np
 from scipy.optimize import least_squares
 from pydrake.all import (
     AddMultibodyPlantSceneGraph, DiagramBuilder, MeshcatVisualizer,
-    MeshcatVisualizerParams, Parser, QueryObject, Rgba, Role,
+    MeshcatVisualizerParams, Parser, QueryObject, Rgba, RigidTransform, Role, Sphere,
 )
 
 FINGERS = (1, 2, 3)
@@ -27,7 +27,31 @@ HAND_JOINTS = [f"j_dg_{f}_{k}" for f in FINGERS for k in (1, 2, 3, 4)]
 TIP_FRAMES = [f"l_dg_{f}_tip" for f in FINGERS]
 OBJECT_JOINT = "object_yaw"
 DRAKE_NS = "http://drake.mit.edu"
-NX, NU = 13, 12  # x = [12 hand joints, object yaw]; u = hand joint increments
+NX, NU = 13, 12  # RotZ: x = [12 hand joints, object yaw]; u = hand joint increments
+# Meshcat contact dots, one colour per finger (magenta, orange, yellow).
+CONTACT_COLORS = {1: Rgba(0.95, 0.15, 0.60, 1.0), 2: Rgba(1.00, 0.55, 0.00, 1.0),
+                  3: Rgba(1.00, 0.85, 0.00, 1.0)}
+
+
+def is_free(cfg):
+    """Free system: the object is a free body held only by the fingers (no
+    support), q_o = [quaternion wxyz; position xyz]. Otherwise RotZ (Fig. 4a): q_o = yaw."""
+    return cfg.get("system", "rotz") == "free"
+
+
+def n_q_object(cfg):
+    return 7 if is_free(cfg) else 1
+
+
+def n_v_object(cfg):
+    return 6 if is_free(cfg) else 1
+
+
+def object_center(cfg, x):
+    """World position of the object center for state x."""
+    if is_free(cfg):
+        return np.asarray(x[NU + 4:NU + 7], float)
+    return np.asarray(cfg["obj_center"], float)
 
 
 def finger_sign(link):
@@ -73,35 +97,40 @@ def _write_hand_urdf(cfg, path, keep_visuals):
                 mesh_dir, os.path.basename(mesh.get("filename"))))
         suffix = name.split("_")[-1]  # l_dg_2_tip -> "tip", l_dg_2_4 -> "4"
         if name.startswith("l_dg_") and name[5] in "123" and suffix in sphere_specs:
-            for i, (dist, radius) in enumerate(sphere_specs[suffix]):
+            for i, spec in enumerate(sphere_specs[suffix]):
+                dist, z, radius = spec if len(spec) == 3 else (spec[0], 0.0, spec[1])
                 col = ET.SubElement(link, "collision", name=f"{name}_sphere{i}")
-                ET.SubElement(col, "origin", xyz=f"{finger_sign(name) * dist} 0 0",
+                ET.SubElement(col, "origin", xyz=f"{finger_sign(name) * dist} 0 {z}",
                               rpy="0 0 0")
                 ET.SubElement(ET.SubElement(col, "geometry"), "sphere",
                               radius=str(radius))
                 props = ET.SubElement(col, f"{{{DRAKE_NS}}}proximity_properties")
                 for tag in ("mu_static", "mu_dynamic"):
                     ET.SubElement(props, f"{{{DRAKE_NS}}}{tag}", value=str(cfg["mu"]))
-    # Planning model: only hand-object contact. Hand self-collision excluded.
-    group = ET.SubElement(robot, f"{{{DRAKE_NS}}}collision_filter_group",
-                          name="hand_self")
-    for link in robot.findall("link"):
-        ET.SubElement(group, f"{{{DRAKE_NS}}}member", link=link.get("name"))
-    ET.SubElement(group, f"{{{DRAKE_NS}}}ignored_collision_filter_group",
-                  name="hand_self")
+    # Contacts in Eq. (2): hand-object and finger-finger (fingers cannot pass
+    # through each other). Links of the same finger are filtered: their spheres
+    # overlap by construction at the joints.
+    for f in FINGERS:
+        group = ET.SubElement(robot, f"{{{DRAKE_NS}}}collision_filter_group",
+                              name=f"finger_{f}")
+        for link in robot.findall("link"):
+            if link.get("name").startswith(f"l_dg_{f}_"):
+                ET.SubElement(group, f"{{{DRAKE_NS}}}member", link=link.get("name"))
+        ET.SubElement(group, f"{{{DRAKE_NS}}}ignored_collision_filter_group",
+                      name=f"finger_{f}")
     tree.write(path)
 
 
 def _write_object_sdf(cfg, path):
     r, (cx, cy, cz), m = cfg["obj_radius"], cfg["obj_center"], cfg["obj_mass"]
     inertia = 0.4 * m * r * r
-    markers = "".join(  # visual-only stripes so rotation is visible in Meshcat
-        f"""
-      <visual name="marker{i}">
-        <pose>{r * np.cos(a):.5f} {r * np.sin(a):.5f} 0 0 0 {a:.5f}</pose>
-        <geometry><box><size>0.006 0.006 {1.6 * r}</size></box></geometry>
-        <material><diffuse>0.9 0.2 0.1 1</diffuse></material>
-      </visual>""" for i, a in enumerate(np.arange(0, 2 * np.pi, np.pi / 3)))
+    joint = "" if is_free(cfg) else f"""
+    <!-- Unactuated: effort 0 => Drake attaches no actuator to this joint. -->
+    <joint name="{OBJECT_JOINT}" type="revolute">
+      <parent>world</parent>
+      <child>object</child>
+      <axis><xyz>0 0 1</xyz><limit><effort>0</effort></limit></axis>
+    </joint>"""  # Free: no joint, so Drake makes the object a free (6-dof) body
     with open(path, "w") as fh:
         fh.write(f"""<?xml version="1.0"?>
 <sdf version="1.7" xmlns:drake="{DRAKE_NS}">
@@ -123,14 +152,8 @@ def _write_object_sdf(cfg, path):
       <visual name="object_visual">
         <geometry><sphere><radius>{r}</radius></sphere></geometry>
         <material><diffuse>0.2 0.4 0.9 0.6</diffuse></material>
-      </visual>{markers}
-    </link>
-    <!-- Unactuated: effort 0 => Drake attaches no actuator to this joint. -->
-    <joint name="{OBJECT_JOINT}" type="revolute">
-      <parent>world</parent>
-      <child>object</child>
-      <axis><xyz>0 0 1</xyz><limit><effort>0</effort></limit></axis>
-    </joint>
+      </visual>
+    </link>{joint}
   </model>
 </sdf>
 """)
@@ -157,13 +180,17 @@ def build_plant(files, visual=False, meshcat=None):
             role=Role.kProximity, prefix="collision",
             default_color=Rgba(0.1, 0.8, 0.2, 0.5), visible_by_default=True))
     diagram = builder.Build()
-    s = dict(diagram=diagram, plant=plant, sg=sg, hand=hand, obj=obj)
+    s = dict(diagram=diagram, plant=plant, sg=sg, hand=hand, obj=obj, meshcat=meshcat)
     s["ctx"] = diagram.CreateDefaultContext()
     s["pctx"] = plant.GetMyMutableContextFromRoot(s["ctx"])
-    # Map our state x = [hand joints (HAND_JOINTS order), object yaw] -> plant q.
+    # Map our state x = [hand joints (HAND_JOINTS order), q_o] -> plant q.
+    if plant.HasJointNamed(OBJECT_JOINT, obj):  # RotZ: q_o = yaw
+        obj_q = [plant.GetJointByName(OBJECT_JOINT, obj).position_start()]
+    else:  # Free: q_o = [quaternion wxyz; position xyz]
+        start = plant.GetBodyByName("object", obj).floating_positions_start()
+        obj_q = list(range(start, start + 7))
     s["x_to_q"] = np.array(
-        [plant.GetJointByName(j, hand).position_start() for j in HAND_JOINTS]
-        + [plant.GetJointByName(OBJECT_JOINT, obj).position_start()])
+        [plant.GetJointByName(j, hand).position_start() for j in HAND_JOINTS] + obj_q)
     return s
 
 
@@ -175,13 +202,14 @@ def set_x(s, x):
 
 def joint_limits(s):
     p, hand = s["plant"], s["hand"]
-    lo = np.array([p.GetJointByName(j, hand).position_lower_limits()[0] for j in HAND_JOINTS])
-    hi = np.array([p.GetJointByName(j, hand).position_upper_limits()[0] for j in HAND_JOINTS])
-    return lo, hi
+    q_lo = np.array([p.GetJointByName(j, hand).position_lower_limits()[0] for j in HAND_JOINTS])
+    q_hi = np.array([p.GetJointByName(j, hand).position_upper_limits()[0] for j in HAND_JOINTS])
+    return q_lo, q_hi
 
 
 def signed_distances(s, x):
-    """All unfiltered hand-object pairs: list of (hand_body, phi [m])."""
+    """All unfiltered hand-object pairs (finger-finger pairs left out): list of
+    (hand_body, phi [m])."""
     set_x(s, x)
     qo: QueryObject = s["sg"].get_query_output_port().Eval(
         s["sg"].GetMyContextFromRoot(s["ctx"]))
@@ -190,6 +218,8 @@ def signed_distances(s, x):
     for sdp in qo.ComputeSignedDistancePairwiseClosestPoints(1.0):
         names = [s["plant"].GetBodyFromFrameId(insp.GetFrameId(g)).name()
                  for g in (sdp.id_A, sdp.id_B)]
+        if "object" not in names:
+            continue
         hand_body = names[0] if names[1] == "object" else names[1]
         out.append((hand_body, sdp.distance))
     return out
@@ -203,6 +233,39 @@ def tip_sphere_center(s, finger, cfg):
         s["plant"].world_frame()).ravel()
 
 
+def tip_contacts(s, cfg, x):
+    """Per fingertip: signed distance tip sphere <-> object [m] and the closest
+    point on the object surface (world frame). Sphere-sphere geometry, the same
+    pair qsim uses."""
+    set_x(s, x)
+    c, r = object_center(cfg, x), cfg["obj_radius"]
+    r_tip = cfg["hand_spheres"]["tip"][0][1]
+    phi, points = np.zeros(len(FINGERS)), np.zeros((len(FINGERS), 3))
+    for j, f in enumerate(FINGERS):
+        d = tip_sphere_center(s, f, cfg) - c
+        dist = np.linalg.norm(d)
+        phi[j] = dist - r - r_tip
+        points[j] = c + r * d / dist
+    return phi, points
+
+
+def _add_contact_dots(s, cfg):
+    for f in FINGERS:
+        s["meshcat"].SetObject(f"contacts/tip{f}", Sphere(cfg["contact_dot_radius"]),
+                               CONTACT_COLORS[f])
+
+
+def _set_contact_dots(s, cfg, x, time=None):
+    """Move each finger's dot to its contact point; show it only while the tip
+    is within cfg["contact_phi"]. With `time`, the change goes into the recording."""
+    phi, points = tip_contacts(s, cfg, x)
+    for j, f in enumerate(FINGERS):
+        path = f"contacts/tip{f}"
+        s["meshcat"].SetTransform(path, RigidTransform(points[j]), time_in_recording=time)
+        s["meshcat"].SetProperty(path, "visible", bool(phi[j] < cfg["contact_phi"]),
+                                 time_in_recording=time)
+
+
 def initial_grasp(s, cfg):
     """Symmetric grasp: each finger plane passes through the object axis and its
     tip sphere sits `grasp_gap` outside the object surface at elevation
@@ -210,7 +273,9 @@ def initial_grasp(s, cfg):
     r_target = cfg["obj_radius"] + cfg["hand_spheres"]["tip"][0][1] + cfg["grasp_gap"]
     c = np.asarray(cfg["obj_center"])
     el = cfg["grasp_elevation"]
-    x = np.zeros(NX)
+    x = np.zeros(NU + n_q_object(cfg))
+    if is_free(cfg):
+        x[NU:] = [1.0, 0.0, 0.0, 0.0, *c]  # identity orientation at obj_center
     for i, (f, j1, azim) in enumerate(zip(FINGERS, cfg["grasp_j1"], cfg["finger_azimuth"])):
         target = c + r_target * np.array(
             [np.cos(azim) * np.cos(el), np.sin(azim) * np.cos(el), np.sin(el)])
@@ -253,19 +318,26 @@ def _load_stl(path):
     return rec["v"].reshape(-1, 3).astype(float)
 
 
-def show(s, x):
+def show(s, x, cfg=None):
+    """Publish state x; with cfg, also draw the fingertip contact dots."""
     set_x(s, x)
     s["diagram"].ForcedPublish(s["ctx"])
+    if cfg is not None:
+        _add_contact_dots(s, cfg)
+        _set_contact_dots(s, cfg, x)
 
 
-def animate(s, xs, h):
-    """Record states xs (one per time step h) as a Meshcat animation."""
+def animate(s, xs, h, cfg):
+    """Record states xs (one per time step h) as a Meshcat animation, with a
+    coloured dot at each fingertip contact (tip within cfg["contact_phi"])."""
+    show(s, xs[0], cfg)  # live scene = first frame (also creates the dots)
     vis = [v for v in s["diagram"].GetSystems() if isinstance(v, MeshcatVisualizer)]
     for v in vis:
         v.StartRecording(set_transforms_while_recording=False)
     for i, x in enumerate(xs):
         s["ctx"].SetTime(i * h)
         show(s, x)
+        _set_contact_dots(s, cfg, x, time=i * h)
     for v in vis:
         v.StopRecording()
         v.PublishRecording()

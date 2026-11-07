@@ -192,7 +192,7 @@ index 271a278..3e867a6 100644
    auto prog = drake::solvers::MathematicalProgram();
    auto B = prog.NewContinuousVariables(n_x, n_u, "B");
 diff --git a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
-index 649faf1..e671c31 100644
+index 649faf1..344f3e6 100644
 --- a/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
 +++ b/quasistatic_simulator_cpp/qsim/quasistatic_simulator.cc
 @@ -47,10 +47,17 @@ void CreateMbp(drake::systems::DiagramBuilder<double>* builder,
@@ -350,7 +350,27 @@ index 649faf1..e671c31 100644
    /*----------------------------------------------------------------*/
    if (!lambda_star_active_indices.empty()) {
      const auto q = GetQVecFromDict(q_next_dict);
-@@ -1473,13 +1505,13 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertRowVToQdot(
+@@ -1323,7 +1355,8 @@ Eigen::MatrixXd QuasistaticSimulator::CalcDfDxLogIcecream(
+     //    cout << "\n";
+   }
+ 
+-  DyDq += drake::math::ExtractGradient(y);
++  // n_q_: with no contacts y has no derivatives and the gradient would be n_v x 0.
++  DyDq += drake::math::ExtractGradient(y, n_q_);
+   DyDq *= -1;
+   H_llt.solveInPlace(DyDq);  // Now it becomes Dv_nextDq.
+ 
+@@ -1364,7 +1397,8 @@ Eigen::MatrixXd QuasistaticSimulator::CalcDfDxLogPyramid(
+     }
+   }
+ 
+-  DyDq += drake::math::ExtractGradient(y);
++  // n_q_: with no contacts y has no derivatives and the gradient would be n_v x 0.
++  DyDq += drake::math::ExtractGradient(y, n_q_);
+   DyDq *= -1;
+   H_llt.solveInPlace(DyDq);  // Now it becomes Dv_nextDq.
+ 
+@@ -1473,13 +1507,13 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertRowVToQdot(
        const Eigen::Vector4d& Q_WB = q_dict.at(model).head(4);
  
        // Rotation.
@@ -369,7 +389,7 @@ index 649faf1..e671c31 100644
      }
    }
  
-@@ -1498,14 +1530,14 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertColVToQdot(
+@@ -1498,14 +1532,14 @@ Eigen::MatrixXd QuasistaticSimulator::ConvertColVToQdot(
        const Eigen::Vector4d& Q_WB = q_dict.at(model).head(4);
  
        // Rotation.

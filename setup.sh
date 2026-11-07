@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds everything needed by run.py (macOS arm64; tested on macOS 26, Apple clang 16).
+# Builds everything needed by run_rotz.py / run_free.py (macOS arm64; tested on macOS 26, Apple clang 16).
 #   prerequisites: Homebrew python@3.13, cmake, yaml-cpp   (brew install python@3.13 cmake yaml-cpp)
 # Result: .venv with pydrake 1.58.0 + qsim_cpp (pangtao22/quasistatic_simulator @ c917755,
 # patched for Drake 1.58 by qsim_drake1.58.patch) on its import path.
