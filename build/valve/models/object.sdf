@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<sdf version="1.7" xmlns:drake="http://drake.mit.edu">
+  <model name="object">
+    <link name="object">
+      <pose>0.0 0.0 0.21 0 0 0</pose>
+      <inertial>
+        <mass>0.1</mass>
+        <inertia><ixx>6.400000000000001e-05</ixx><iyy>6.400000000000001e-05</iyy><izz>6.400000000000001e-05</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <visual name="hub">
+        <geometry><cylinder><radius>0.0128</radius><length>0.033</length></cylinder></geometry>
+        <material><diffuse>0.3 0.3 0.35 1</diffuse></material>
+      </visual>
+      <collision name="spoke_0">
+        <pose>0.012500000000000004 0.021650635094610966 0 0 0 1.0471975511965976</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <drake:proximity_properties>
+          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+        </drake:proximity_properties>
+      </collision>
+      <visual name="spoke_0">
+        <pose>0.012500000000000004 0.021650635094610966 0 0 0 1.0471975511965976</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <material><diffuse>0.9 0.1 0.1 1</diffuse></material>
+      </visual>
+      <collision name="spoke_1">
+        <pose>-0.025 3.061616997868383e-18 0 0 0 3.141592653589793</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <drake:proximity_properties>
+          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+        </drake:proximity_properties>
+      </collision>
+      <visual name="spoke_1">
+        <pose>-0.025 3.061616997868383e-18 0 0 0 3.141592653589793</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <material><diffuse>0.2 0.4 0.9 1</diffuse></material>
+      </visual>
+      <collision name="spoke_2">
+        <pose>0.012499999999999983 -0.021650635094610977 0 0 0 5.235987755982988</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <drake:proximity_properties>
+          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+        </drake:proximity_properties>
+      </collision>
+      <visual name="spoke_2">
+        <pose>0.012499999999999983 -0.021650635094610977 0 0 0 5.235987755982988</pose>
+        <geometry><box><size>0.05 0.016 0.03</size></box></geometry>
+        <material><diffuse>0.2 0.4 0.9 1</diffuse></material>
+      </visual>
+      <visual name="axis_x">
+        <pose>0.03125 0.0 0.0 0 0 0</pose>
+        <geometry><box><size>0.0625 0.004 0.004</size></box></geometry>
+        <material><diffuse>0.9 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="axis_y">
+        <pose>0.0 0.03125 0.0 0 0 0</pose>
+        <geometry><box><size>0.004 0.0625 0.004</size></box></geometry>
+        <material><diffuse>0.1 0.7 0.1 1</diffuse></material>
+      </visual>
+      <visual name="axis_z">
+        <pose>0.0 0.0 0.03125 0 0 0</pose>
+        <geometry><box><size>0.004 0.004 0.0625</size></box></geometry>
+        <material><diffuse>0.1 0.2 0.9 1</diffuse></material>
+      </visual>
+    </link>
+    <!-- Unactuated: effort 0 => Drake attaches no actuator to this joint. -->
+    <joint name="object_yaw" type="revolute">
+      <parent>world</parent>
+      <child>object</child>
+      <axis><xyz>0 0 1</xyz><limit><effort>0</effort></limit></axis>
+    </joint>
+    <link name="valve_base">
+      <pose>0.0 0.0 0.1765 0 0 0</pose>
+      <collision name="base_0">
+        <pose>0 0 0 0 0 0.0</pose>
+        <geometry><box><size>0.05 0.05 0.033</size></box></geometry>
+        <drake:proximity_properties>
+          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+        </drake:proximity_properties>
+      </collision>
+      <visual name="base_0">
+        <pose>0 0 0 0 0 0.0</pose>
+        <geometry><box><size>0.05 0.05 0.033</size></box></geometry>
+        <material><diffuse>0.45 0.45 0.5 1</diffuse></material>
+      </visual>
+      <collision name="base_1">
+        <pose>0 0 0 0 0 0.7853981633974483</pose>
+        <geometry><box><size>0.05 0.05 0.033</size></box></geometry>
+        <drake:proximity_properties>
+          <drake:mu_static>1.0</drake:mu_static>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
+        </drake:proximity_properties>
+      </collision>
+      <visual name="base_1">
+        <pose>0 0 0 0 0 0.7853981633974483</pose>
+        <geometry><box><size>0.05 0.05 0.033</size></box></geometry>
+        <material><diffuse>0.45 0.45 0.5 1</diffuse></material>
+      </visual>
+    </link>
+    <joint name="valve_base_weld" type="fixed">
+      <parent>world</parent>
+      <child>valve_base</child>
+    </joint>
+    <drake:collision_filter_group name="valve">
+      <drake:member>object</drake:member>
+      <drake:member>valve_base</drake:member>
+      <drake:ignored_collision_filter_group>valve</drake:ignored_collision_filter_group>
+    </drake:collision_filter_group>
+  </model>
+</sdf>

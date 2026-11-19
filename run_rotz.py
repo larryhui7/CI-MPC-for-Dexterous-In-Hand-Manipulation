@@ -6,6 +6,8 @@ CLI for the contact-implicit MPC prototype (planner verification only).
   python run_rotz.py grad       Step 3: check f_x, f_u against finite differences
   python run_rotz.py traj       Step 4: one DDP trajectory optimization (N=10)
   python run_rotz.py mpc        Step 5: closed-loop MPC (+ baseline, repro check, Meshcat)
+
+--hand dg3fm (default) or --hand allegro selects the hand model (scene.HANDS).
 """
 import argparse
 import os
@@ -21,45 +23,20 @@ import scene
 CFG = dict(
     system="rotz",                    # object on a vertical hinge (scene.py)
     # --- files ---
-    urdf="dg3fm/dg3f_m.urdf",         # Tesollo URDF
-    mesh_dir="dg3fm/meshes",
-    build_dir="build",                # generated model files
     results_dir="results",            # logs and plots
-    meshcat_port=7123,                # fixed port on localhost
-    # --- object: sphere on a world-fixed revolute joint about +z ---
-    obj_radius=0.04,                  # [m]
-    # [m] above the base housing (top z=0.136)
-    obj_center=[0.0, 0.0, 0.21],
-    # [kg] (only enters via unactuated_mass_scale)
+    meshcat_port=7123,               
+    obj_radius=0.04,                  # [m] sphere on revolute joint in +z
     obj_mass=0.1,
     mu=1.0,                           # hand-object friction coefficient
-    # --- hand collision spheres: link suffix -> [(x, r) or (x, z, r)] [m] in the
-    # link frame, x along the finger; dense enough that fingers cannot pass
-    # through each other (official meshes as reference)
-    hand_spheres={"2": [(0.0, 0.010, 0.011), (0.012, 0.010, 0.011),
-                        (0.024, 0.012, 0.011), (0.024, 0.027, 0.011)],
-                  "3": [(0.008, 0.0125), (0.019, 0.0125), (0.030, 0.0125), (0.041, 0.0125)],
-                  "4": [(0.016, 0.0112), (0.005, 0.0112), (0.027, 0.0112)],
-                  "tip": [(0.0175, 0.011), (0.007, 0.011)]},  # tip[0]: the contact sphere
-    # --- initial grasp (j1 aligns each finger plane with the object axis) ---
-    finger_azimuth=[0.0, 2 * np.pi / 3, -2 * np.pi / 3],
-    grasp_j1=[0.0, -np.pi / 3, np.pi / 3],
     grasp_gap=0.001,                  # [m] tip-sphere-to-object gap
-    grasp_elevation=0.0,              # [rad] contact point above the equator
-    grasp_ik_guess=[1.2, 0.6],        # (j3, j4) initial guess
-    # --- smoothed CQDC contact model (paper eq. 2; ccp.py) ---
-    h=0.1,                            # [s] time step (paper: 0.1)
-    # log-barrier weight (paper: 100; smaller = smoother)
-    kappa=100.0,
-    # [N m/rad] joint stiffness (qsim Allegro default)
-    Kp=100.0,
-    # [N m s/rad] object hinge (quasi-dynamic damper)
-    hinge_damping=0.5,
+    h=0.1,                            # CQDC contact model time step (paper: 0.1)
+    kappa=100.0,                      # log-barrier weight (paper: 100)
+    Kp=100.0,                         # [N m/rad] joint stiffness 
+    hinge_damping=0.5,                  # [N m s/rad] object hinge / damper
     contact_detection_tolerance=0.025,  # [m] pairs farther apart are ignored
-    # --- MPC / control-limited DDP (mpc.py) ---
-    N=10,                             # horizon (paper: 10)
-    # [rad] |joint increment| per step (paper RotZ: 0.05)
-    u_max=0.05,
+    use_mosek=False,
+    N=10,                             # time horizon for MPC (paper: 10)
+    u_max=0.05,                       # [rad] |joint increment| per step (paper RotZ: 0.05)
     omega_ref=0.79,                   # [rad/s] commanded object yaw rate (paper Sec. IV)
     w_obj=100.0,                      # W_o  [1/rad^2]
     # W_r = w_posture * I  (nominal = initial grasp)
@@ -78,7 +55,77 @@ CFG = dict(
     contact_phi=0.003,
     contact_dot_radius=0.007,         # [m] Meshcat contact dot (visual only)
 )
+# Hand-specific parameters, merged into CFG by select_hand().
+HAND_CFG = {
+    "dg3fm": dict(
+        build_dir="build",                # generated model files
+        result_prefix="",                 # results/<prefix>step5_mpc.png, ...
+        # [m] above the base housing (top z=0.136)
+        obj_center=[0.0, 0.0, 0.21],
+        # --- hand collision spheres: link key (scene.HANDS parts) -> [(x, r) or
+        # (x, z, r)] [m] in the link frame, x along the finger; dense enough that
+        # fingers cannot pass through each other (official meshes as reference)
+        hand_spheres={"2": [(0.0, 0.010, 0.011), (0.012, 0.010, 0.011),
+                            (0.024, 0.012, 0.011), (0.024, 0.027, 0.011)],
+                      "3": [(0.008, 0.0125), (0.019, 0.0125), (0.030, 0.0125), (0.041, 0.0125)],
+                      "4": [(0.016, 0.0112), (0.005, 0.0112), (0.027, 0.0112)],
+                      "tip": [(0.0175, 0.011), (0.007, 0.011)]},  # tip[0]: the contact sphere
+        # --- initial grasp (scene.initial_grasp): symmetric, j1 aligns each
+        # finger plane with the object axis, j2 = 0, (j3, j4) by IK ---
+        finger_azimuth=[0.0, 2 * np.pi / 3, -2 * np.pi / 3],
+        grasp_elevation=[0.0, 0.0, 0.0],  # [rad] contact point above the equator
+        grasp_fixed=[{0: 0.0, 1: 0.0}, {0: -np.pi / 3, 1: 0.0}, {0: np.pi / 3, 1: 0.0}],
+        grasp_ik_guess=[[0.0, 0.0, 1.2, 0.6]] * 3,
+        grasp_ik_bounds={2: (0.0, 2.81), 3: (-1.57, 1.86)},
+    ),
+    "allegro": dict(
+        build_dir="build/allegro",
+        result_prefix="allegro_",
+        # [m] above the upturned palm (palm surface z = 0.011; the palm itself
+        # has no collision geometry: only the fingers touch the object)
+        obj_center=[-0.115, 0.0, 0.085],
+        # (z, r) [m] in the link frame, z along the finger (sphere layout of
+        # qsim's allegro_hand_description_right_spheres.sdf)
+        hand_spheres={"1": [(0.008, 0.013), (0.034, 0.013)],
+                      "2": [(0.012, 0.013), (0.038, 0.013)],
+                      "thumb2": [(0.0257, 0.013)],
+                      "thumb3": [(0.016, 0.013)],
+                      "tip": [(0.0, 0.012)]},     # the contact sphere (as in the URDF)
+        # --- initial grasp: index, middle, ring wrap the ball from -x, the
+        # thumb opposes them (30 deg is as far round as it reaches with joint
+        # range to spare); all 4 joints of each finger by IK ---
+        finger_azimuth=np.radians([110.0, 180.0, -110.0, 30.0]),
+        grasp_elevation=[0.0, 0.0, 0.0, 0.0],
+        grasp_fixed=[{}, {}, {}, {}],
+        grasp_ik_guess=[[0.0, 0.8, 0.8, 0.8]] * 3 + [[1.2, 0.3, 0.5, 0.8]],
+        grasp_ik_reg=1e-10,
+    ),
+}
 # =============================================================================
+
+
+def select_hand(name, cfg=None):
+    """Switch scene.py and the configuration to hand `name`."""
+    scene.use_hand(name)
+    cfg = CFG if cfg is None else cfg
+    cfg.update(hand=name, **HAND_CFG[name])
+    return cfg
+
+
+select_hand("dg3fm")
+
+
+def result_path(cfg, name):
+    return os.path.join(cfg["results_dir"], cfg["result_prefix"] + name)
+
+
+def contact_dot_legend():
+    return ", ".join(f"finger {f + 1} {scene.CONTACT_COLOR_NAMES[f]}" for f in scene.FINGERS)
+
+
+def joints(kind):
+    """x / u indices of every finger's squeeze or tangential joint (scene.HANDS)."""
+    return [scene.joint_index(f, k) for f, k in enumerate(scene.HAND[kind])]
 
 
 def start_meshcat():
@@ -111,18 +158,20 @@ def cmd_scene(args):
         print(f"  x[{i:2d}] {j:9s} axis={jt.revolute_axis()} "
               f"[{q_lo[i]:+.3f}, {q_hi[i]:+.3f}]  x0={x0[i]:+.4f}")
     jo = p.GetJointByName(scene.OBJECT_JOINT, s["obj"])
+    nu = scene.NU
     print(
-        f"  x[12] {scene.OBJECT_JOINT} axis={jo.revolute_axis()} unlimited  x0={x0[12]:+.4f}")
-    assert len(x0) == scene.NX == len(scene.HAND_JOINTS) + 1
-    print(f"state dimension nx = {scene.NX} (12 hand + 1 object) verified")
+        f"  x[{nu}] {scene.OBJECT_JOINT} axis={jo.revolute_axis()} unlimited  x0={x0[nu]:+.4f}")
+    assert len(x0) == len(scene.HAND_JOINTS) + 1
+    print(f"state dimension nx = {nu + 1} ({nu} hand + 1 object) verified")
     print("\nfingertip frames (world position at x0):")
     scene.set_x(s, x0)
     for f, name in zip(scene.FINGERS, scene.TIP_FRAMES):
         X = p.CalcRelativeTransform(
             s["pctx"], p.world_frame(), p.GetFrameByName(name))
         c = scene.tip_sphere_center(s, f, CFG)
+        d = c - np.asarray(CFG["obj_center"])  # azimuth seen from the object axis
         print(f"  {name}: origin={np.round(X.translation(), 4)}  tip-sphere center="
-              f"{np.round(c, 4)}  azimuth={np.degrees(np.arctan2(c[1], c[0])):+.1f} deg")
+              f"{np.round(c, 4)}  azimuth={np.degrees(np.arctan2(d[1], d[0])):+.1f} deg")
     print("\ncollision geometry (planning model):")
     insp = s["sg"].model_inspector()
     for g in insp.GetAllGeometryIds(Role.kProximity):
@@ -132,9 +181,11 @@ def cmd_scene(args):
     print("\nsigned distances hand-object at x0 [mm]:")
     for body, phi in sorted(scene.signed_distances(s, x0)):
         print(f"  {body:10s} {1e3 * phi:+7.2f}")
-    print("\nclearance object <-> official collision meshes at x0 [mm] "
-          "(vertex-based, negative = penetration):")
-    for link, d in scene.mesh_clearance(s, CFG, x0).items():
+    clearance = scene.mesh_clearance(s, CFG, x0)
+    if clearance:
+        print("\nclearance object <-> official collision meshes at x0 [mm] "
+              "(vertex-based, negative = penetration):")
+    for link, d in clearance.items():
         print(f"  {link:10s} {1e3 * d:+7.2f}")
     if not args.no_meshcat:
         meshcat = start_meshcat()
@@ -164,8 +215,9 @@ def cmd_step(args):
     files, s, x0 = setup()
     m = ccp.make_model(CFG, files)
     c = CFG["obj_center"]
+    nu = scene.NU
     print(
-        "input: u = joint increments (paper); qsim receives q_cmd = x[:12] + u")
+        "input: u = joint increments (paper); qsim receives q_cmd = x[:nu] + u")
     print(f"h={m.h} s, kappa={m.params.log_barrier_weight}, Kp={CFG['Kp']} N m/rad, "
           f"unactuated_mass_scale={m.params.unactuated_mass_scale:.1f}")
 
@@ -177,51 +229,54 @@ def cmd_step(args):
     print(f"\n(a) qsim contact pairs == pydrake signed distances at x0: {phi_qsim == phi_drake}"
           f" ({len(phi_qsim)} pairs within tolerance)")
 
-    def J(name):
-        return scene.HAND_JOINTS.index(name)
+    # squeeze / tangential joints of each finger: scene.HANDS
     tests = {}
     u = np.zeros(scene.NU)
     tests["zero input"] = (x0, u)
     u = np.zeros(scene.NU)
-    u[[J(f"j_dg_{f}_3") for f in scene.FINGERS]] = 0.02
-    tests["squeeze (j3 += 0.02)"] = (x0, u)
+    u[joints("squeeze")] = 0.02
+    tests["squeeze (+= 0.02)"] = (x0, u)
     for sign in (+1, -1):
-        u = tests["squeeze (j3 += 0.02)"][1].copy()
-        u[[J(f"j_dg_{f}_1") for f in scene.FINGERS]] = sign * 0.03
-        tests[f"squeeze + tangential j1 {sign * 0.03:+.2f}"] = (x0, u)
+        u = tests["squeeze (+= 0.02)"][1].copy()
+        u[joints("tangential")] = sign * 0.03
+        tests[f"squeeze + tangential {sign * 0.03:+.2f}"] = (x0, u)
     print("\n(b) single steps (dtheta = object rotation; contacts with phi < 10 mm):")
     results = {}
     for name, (x, u) in tests.items():
         x1, contacts = ccp.step(m, x, u, contacts=True)
         x1_exact = ccp.step(m, x, u, exact=True)
-        results[name] = x1[12] - x[12]
-        dq = x1[:12] - x[:12]
+        results[name] = x1[nu] - x[nu]
+        dq = x1[:nu] - x[:nu]
         print(f"  {name:32s} finite={np.isfinite(x1).all()}  "
-              f"dtheta={np.degrees(x1[12] - x[12]):+8.4f} deg "
-              f"(exact SOCP: {np.degrees(x1_exact[12] - x[12]):+8.4f})  "
+              f"dtheta={np.degrees(x1[nu] - x[nu]):+8.4f} deg "
+              f"(exact SOCP: {np.degrees(x1_exact[nu] - x[nu]):+8.4f})  "
               f"|dq_hand - u|={np.linalg.norm(dq - u):.2e} rad")
         print_contacts(contacts, c)
     plus, minus = (
-        results[f"squeeze + tangential j1 {v:+.2f}"] for v in (0.03, -0.03))
+        results[f"squeeze + tangential {v:+.2f}"] for v in (0.03, -0.03))
     print(f"\nopposite tangential pushes -> opposite rotations: "
           f"{np.sign(plus) == -np.sign(minus) != 0}  ({np.degrees(plus):+.3f} / "
           f"{np.degrees(minus):+.3f} deg)")
 
-    # (c) Commands away from contact: rotation per step for j1 = +0.05 (no squeeze)
+    # (c) Commands away from contact: rotation per step for tangential += 0.05 (no squeeze)
     # vs. tip-object gap. Nonzero values are the smoothed model's
     # force-at-a-distance; it vanishes as kappa grows / for the exact SOCP and is
     # cut off completely beyond contact_detection_tolerance.
     kappas = [CFG["kappa"], 1e3, 1e4]
     print(
-        "\n(c) away from contact: object rotation [deg] for one step with all j1 += 0.05")
+        "\n(c) away from contact: object rotation [deg] for one step with all tangential joints += 0.05")
     print("    gap [mm] " +
           "".join(f"  kappa={k:<8g}" for k in kappas) + "  exact SOCP")
     u = np.zeros(scene.NU)
-    u[[J(f"j_dg_{f}_1") for f in scene.FINGERS]] = 0.05
+    u[joints("tangential")] = 0.05
     for gap in [0.001, 0.003, 0.005, 0.010, 0.017, 0.024, 0.030]:
-        x = scene.initial_grasp(s, dict(CFG, grasp_gap=gap))
-        row = [np.degrees(ccp.step(m, x, u, kappa=k)[12]) for k in kappas]
-        row.append(np.degrees(ccp.step(m, x, u, exact=True)[12]))
+        try:
+            x = scene.initial_grasp(s, dict(CFG, grasp_gap=gap))
+        except AssertionError:  # a fingertip cannot reach that far out
+            print(f"    {1e3 * gap:6.0f}     (grasp not reachable)")
+            continue
+        row = [np.degrees(ccp.step(m, x, u, kappa=k)[nu]) for k in kappas]
+        row.append(np.degrees(ccp.step(m, x, u, exact=True)[nu]))
         print(f"    {1e3 * gap:6.0f}   " +
               "".join(f"  {v:+12.4f}  " for v in row))
 
@@ -231,22 +286,20 @@ def cmd_grad(args):
     CCP) vs. central finite differences of f."""
     files, s, x0 = setup()
     m = ccp.make_model(CFG, files)
-
-    def J(name):
-        return scene.HAND_JOINTS.index(name)
-    push = np.zeros(scene.NU)
-    push[[J(f"j_dg_{f}_3") for f in scene.FINGERS]] = 0.02
-    push[[J(f"j_dg_{f}_1") for f in scene.FINGERS]] = 0.03
+    nu = scene.NU
+    push = np.zeros(nu)
+    push[joints("squeeze")] = 0.02
+    push[joints("tangential")] = 0.03
     x_rot = x0.copy()
-    x_rot[12] = 0.2
-    x_rot[[J("j_dg_1_1"), J("j_dg_2_4")]] += [0.1, -0.05]
+    x_rot[nu] = 0.2
+    x_rot[[scene.joint_index(0, 0), scene.joint_index(1, 3)]] += [0.1, -0.05]
     cases = {
         "grasp x0, u=0 (gap 1 mm)": (x0, np.zeros(scene.NU)),
         "grasp x0, squeeze+push": (x0, push),
         "touching (gap 0), squeeze+push": (scene.initial_grasp(s, dict(CFG, grasp_gap=0.0)), push),
         "slight penetration (-0.5 mm), u=0": (scene.initial_grasp(s, dict(CFG, grasp_gap=-5e-4)), np.zeros(scene.NU)),
-        "gap 5 mm, closing (j3 += 0.05)": (scene.initial_grasp(s, dict(CFG, grasp_gap=0.005)),
-                                           0.05 * np.isin(np.arange(12), [J(f"j_dg_{f}_3") for f in scene.FINGERS])),
+        "gap 5 mm, closing (squeeze += 0.05)": (scene.initial_grasp(s, dict(CFG, grasp_gap=0.005)),
+                                                0.05 * np.isin(np.arange(nu), joints("squeeze"))),
         "asymmetric, theta=0.2 rad": (x_rot, 0.5 * push),
     }
     epss = [1e-3, 1e-4, 1e-5, 1e-6]
@@ -270,14 +323,14 @@ def cmd_grad(args):
                         Jfd[:, i] = (ccp.step(m, x, u + d) -
                                      ccp.step(m, x, u - d)) / (2 * eps)
                 errs.append(np.linalg.norm(Jq - Jfd) / np.linalg.norm(Jfd))
-                obj.append(np.abs(Jq[12] - Jfd[12]).max())
+                obj.append(np.abs(Jq[nu] - Jfd[nu]).max())
             b = int(np.argmin(errs))
             print(f"{name:38s} {label:4s}" + "".join(f"  {e:11.2e}" for e in errs)
-                  + f"  | {obj[b]:.1e} (|row|max {np.abs(Jq[12]).max():.2f})")
+                  + f"  | {obj[b]:.1e} (|row|max {np.abs(Jq[nu]).max():.2f})")
 
 
 # ---------------------------- plotting ---------------------------------------
-# Validated categorical slots in fixed order (finger 1, 2, 3), muted ink for
+# Validated categorical slots in fixed order (finger 1, 2, 3, 4), muted ink for
 # references, thin lines, recessive grid, one y-axis per panel.
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
 MUTED, INK, GRID = "#8a8985", "#2b2b29", "#e4e3df"
@@ -300,7 +353,7 @@ def _fig(rows, cols, w=11, h=6):
 
 def _plot_controls(axes, t, U, cfg):
     for j, ax in enumerate(axes):
-        for f in range(3):
+        for f in scene.FINGERS:
             ax.step(t, U[:, 4 * f + j], where="post",
                     color=SERIES[f], label=f"finger {f + 1}")
         for b in (-cfg["u_max"], cfg["u_max"]):
@@ -344,12 +397,12 @@ def cmd_traj(args):
                 np.all(U[i] <= mpc.input_bounds(CFG, X[i], *q_lim)[1] + 1e-12) for i in range(N))
     print(f"initialization: zero controls; cost {J0:.4f} -> {info['costs'][-1]:.4f} "
           f"in {info['iters']} iterations ({info['reason']}), {info['time']:.2f} s")
-    print(f"object angle at t=N*h: zero-input {np.degrees(X0[-1, 12]):+.3f} deg, "
-          f"optimized {np.degrees(X[-1, 12]):+.3f} deg (reference {np.degrees(theta_ref(x0, N * h)):.1f})")
+    print(f"object angle at t=N*h: zero-input {np.degrees(X0[-1, scene.NU]):+.3f} deg, "
+          f"optimized {np.degrees(X[-1, scene.NU]):+.3f} deg (reference {np.degrees(theta_ref(x0, N * h)):.1f})")
     print(f"finite: X {np.isfinite(X).all()}, U {np.isfinite(U).all()}; max|u| = "
           f"{np.abs(U).max():.4f} <= {CFG['u_max']}; input+command bounds respected: {bounds_ok}")
     q_lo, q_hi = q_lim
-    viol = np.maximum(X[:, :12] - q_hi, q_lo - X[:, :12]).max()
+    viol = np.maximum(X[:, :scene.NU] - q_hi, q_lo - X[:, :scene.NU]).max()
     print(f"max joint-limit violation along X: {max(viol, 0):.2e} rad")
     plt, fig, ax = _fig(2, 4, w=13, h=6)
     ax[0].plot(info["costs"], color=SERIES[0], marker="o", ms=4)
@@ -357,8 +410,8 @@ def cmd_traj(args):
     ax[0].set_xlabel("iteration")
     ax[0].set_yscale("log")
     t = h * np.arange(N + 1)
-    ax[1].plot(t, np.degrees(X0[:, 12]), color=MUTED, label="initial (u = 0)")
-    ax[1].plot(t, np.degrees(X[:, 12]), color=SERIES[0], label="optimized")
+    ax[1].plot(t, np.degrees(X0[:, scene.NU]), color=MUTED, label="initial (u = 0)")
+    ax[1].plot(t, np.degrees(X[:, scene.NU]), color=SERIES[0], label="optimized")
     ax[1].plot(t, np.degrees(theta_ref(x0, t)),
                color=MUTED, ls="--", lw=1, label="reference")
     ax[1].set_title("object angle [deg]", color=INK, loc="left")
@@ -371,10 +424,10 @@ def cmd_traj(args):
                f"cost: {J0:.3f} -> {info['costs'][-1]:.3f}\nsolve time: {info['time']:.2f} s",
                va="top", color=INK, transform=ax[2].transAxes)
     _plot_controls(ax[4:], h * np.arange(N), U, CFG)
-    path = os.path.join(CFG["results_dir"], "step4_trajopt.png")
+    path = result_path(CFG, "step4_trajopt.png")
     fig.savefig(path, dpi=130)
     print("saved", path)
-    np.savez(os.path.join(CFG["results_dir"], "step4_trajopt.npz"), X=X, U=U, X0=X0,
+    np.savez(result_path(CFG, "step4_trajopt.npz"), X=X, U=U, X0=X0,
              costs=info["costs"])
 
 
@@ -427,7 +480,7 @@ def cmd_mpc(args):
     h = CFG["h"]
     if args.plant == "exact":
         log = run_mpc(files, x0, exact_plant=True)
-        th = log["x"][:, 12]
+        th = log["x"][:, scene.NU]
         goal = theta_ref(x0, h * (len(th) - 1))  # reference at the final time
         print("DIAGNOSTIC: plan with the smoothed model (kappa = %g), execute u_0 in the "
               "exact (unsmoothed) CQDC SOCP. Still quasi-dynamic, not a physics simulation."
@@ -439,7 +492,7 @@ def cmd_mpc(args):
                 f"{k * h:5.1f}  {np.degrees(th[k]):+10.3f}  {1e3 * phi:8.2f}")
         print(f"final angle {np.degrees(th[-1]):+.3f} deg (reference {np.degrees(goal):.1f}); "
               f"final error {np.degrees(th[-1] - goal):+.3f} deg")
-        np.savez(os.path.join(CFG["results_dir"], "diag_exact_plant.npz"),
+        np.savez(result_path(CFG, "diag_exact_plant.npz"),
                  **{k: v for k, v in log.items()})
         return
     print("PLANNER VERIFICATION: MPC actions are executed through the same smoothed "
@@ -448,19 +501,19 @@ def cmd_mpc(args):
     base = run_mpc(files, x0, zero_input=True)
     rep = run_mpc(files, x0)
     t = h * np.arange(len(log["x"]))
-    th = log["x"][:, 12]
+    th = log["x"][:, scene.NU]
     ref = theta_ref(x0, t)
     goal = ref[-1]  # reference at the final time
     err = np.degrees(th - ref)
-    viol = np.maximum(log["x"][:, :12] - log["q_hi"],
-                      log["q_lo"] - log["x"][:, :12])
+    viol = np.maximum(log["x"][:, :scene.NU] - log["q_hi"],
+                      log["q_lo"] - log["x"][:, :scene.NU])
     print(f"\nobject angle: start {np.degrees(th[0]):.2f} deg, final {np.degrees(th[-1]):.3f} deg, "
           f"reference {np.degrees(goal):.1f} deg ({CFG['omega_ref']} rad/s)")
     print(f"mean yaw rate {(th[-1] - th[0]) / t[-1]:.3f} rad/s (commanded {CFG['omega_ref']}); "
           f"tracking error: final {err[-1]:+.3f} deg, mean |err| {np.abs(err).mean():.3f} deg, "
           f"max |err| {np.abs(err).max():.3f} deg")
-    print(f"zero-input baseline final angle: {np.degrees(base['x'][-1, 12]):+.4f} deg "
-          f"(final error {np.degrees(base['x'][-1, 12] - goal):+.2f} deg)")
+    print(f"zero-input baseline final angle: {np.degrees(base['x'][-1, scene.NU]):+.4f} deg "
+          f"(final error {np.degrees(base['x'][-1, scene.NU] - goal):+.2f} deg)")
     print(f"finite: x {np.isfinite(log['x']).all()}, u {np.isfinite(log['u']).all()}, "
           f"cost {np.isfinite(log['cost']).all()}")
     print(f"max |u| = {np.abs(log['u']).max():.4f} (bound {CFG['u_max']}); "
@@ -482,13 +535,13 @@ def cmd_mpc(args):
     dx = max(np.abs(log["x"] - rep["x"]).max(),
              np.abs(log["u"] - rep["u"]).max())
     print(f"reproducibility: max |difference| between two runs = {dx:.1e}")
-    np.savez(os.path.join(CFG["results_dir"], "step5_mpc.npz"),
+    np.savez(result_path(CFG, "step5_mpc.npz"),
              **{f"mpc_{k}": v for k, v in log.items()},
              **{f"base_{k}": v for k, v in base.items()})
 
     plt, fig, ax = _fig(3, 4, w=14, h=9)
     ax[0].plot(t, np.degrees(th), color=SERIES[0], label="MPC")
-    ax[0].plot(t, np.degrees(base["x"][:, 12]),
+    ax[0].plot(t, np.degrees(base["x"][:, scene.NU]),
                color=SERIES[1], label="zero input")
     ax[0].plot(t, np.degrees(ref), color=MUTED, ls="--", lw=1, label="reference")
     ax[0].set_title("object angle [deg]", color=INK, loc="left")
@@ -504,7 +557,7 @@ def cmd_mpc(args):
     ax[3].set_title("DDP iterations per step", color=INK, loc="left")
     for j in range(4):
         a = ax[4 + j]
-        for f in range(3):
+        for f in scene.FINGERS:
             i = 4 * f + j
             a.plot(t, log["x"][:, i], color=SERIES[f], label=f"finger {f + 1}")
         for b in sorted(set(np.r_[log["q_lo"][j::4], log["q_hi"][j::4]])):
@@ -512,7 +565,7 @@ def cmd_mpc(args):
                 a.axhline(b, color=MUTED, ls="--", lw=1)
         a.set_title(f"joint {j + 1} position [rad]", color=INK, loc="left")
     ax[4].legend()
-    for f in range(3):
+    for f in scene.FINGERS:
         ax[8].plot(t[:-1], 1e3 * log["phi_tip"][:, f],
                    color=SERIES[f], label=f"tip {f + 1}")
         ax[9].plot(t[:-1], log["f_tip"][:, f],
@@ -533,7 +586,7 @@ def cmd_mpc(args):
         a.set_xlabel("time [s]")
     fig.suptitle("Planner verification: MPC executed through the same smoothed "
                  "quasi-dynamic model (kappa = %g)" % CFG["kappa"], color=INK)
-    path = os.path.join(CFG["results_dir"], "step5_mpc.png")
+    path = result_path(CFG, "step5_mpc.png")
     fig.savefig(path, dpi=130)
     print("saved", path)
     if not args.no_meshcat:
@@ -543,7 +596,7 @@ def cmd_mpc(args):
         print(
             f"Meshcat animation: {meshcat.web_url()}  (use the Animation controls to replay)\n"
             f"contact dots (tip within {1e3 * CFG['contact_phi']:.0f} mm): "
-            "finger 1 magenta, finger 2 orange, finger 3 yellow")
+            + contact_dot_legend())
         input("press Enter to quit...")
 
 
@@ -552,11 +605,13 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=[
                     "scene", "step", "grad", "traj", "mpc"])
+    ap.add_argument("--hand", choices=list(HAND_CFG), default="dg3fm", help="hand model")
     ap.add_argument("--no-meshcat", action="store_true", help="skip Meshcat")
     ap.add_argument("--plant", choices=["same", "exact"], default="same",
                     help="mpc: execute actions in the planning model (default) or, as a "
                          "diagnostic, in the exact unsmoothed SOCP")
     args = ap.parse_args()
+    select_hand(args.hand)
     os.makedirs(CFG["results_dir"], exist_ok=True)
     {"scene": cmd_scene, "step": cmd_step, "grad": cmd_grad,
         "traj": cmd_traj, "mpc": cmd_mpc}[args.command](args)

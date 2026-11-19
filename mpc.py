@@ -7,13 +7,11 @@ from scipy.linalg import cho_factor, cho_solve
 import ccp
 import scene
 
-NR = scene.NU  # number of joints in the hand = first NR entries of x
-
 
 def make_costs(cfg, q_r_ref, q_o_ref):
     """q_o_ref: object reference per stage, shape (N + 1, n_o) or (N + 1,) for a
     scalar q_o, i.e. the reference trajectory q_o,ref(t_i) over the horizon
-    (index N = terminal). q_o = x[NR:]: yaw (RotZ) or quaternion + position (Free).
+    (index N = terminal). q_o = x[scene.NU:]: yaw (RotZ) or quaternion + position (Free).
     W_o, W_r may be scalars or per-coordinate diagonals."""
     q_o_ref = np.asarray(q_o_ref, float)
     q_o_ref = q_o_ref.reshape(len(q_o_ref), -1)
@@ -23,6 +21,7 @@ def make_costs(cfg, q_r_ref, q_o_ref):
 
     def stage(x, u, i, terminal=False):
         W_r_i = W_r_f if terminal else W_r
+        NR = scene.NU  # number of joints in the hand = first NR entries of x
         q_r, q_o = x[:NR], x[NR:]
         e_o = q_o - q_o_ref[i]
         e_r = q_r - q_r_ref
@@ -45,7 +44,7 @@ def make_costs(cfg, q_r_ref, q_o_ref):
 
 
 def input_bounds(cfg, x, q_lo, q_hi):
-    q_r = x[:NR]
+    q_r = x[:scene.NU]
     min_u = np.maximum(-cfg["u_max"], q_lo - q_r)
     max_u = np.minimum(cfg["u_max"], q_hi - q_r)
     return np.minimum(min_u, max_u), max_u

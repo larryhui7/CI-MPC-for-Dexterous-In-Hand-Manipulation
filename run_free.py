@@ -3,11 +3,11 @@ held only by the fingers (no support), commanded to rotate about the vertical ax
 Same costs (Eqs. 3-5), dynamics (Eq. 2) and solver as run_rotz.py; only the
 object model, the input bound and the weights differ (planner verification only).
 
-  python run_free.py scene    load/inspect the Free scene, show it in Meshcat
-  python run_free.py traj     one DDP trajectory optimization (N=10)
-  python run_free.py mpc      closed-loop MPC (+ zero-input baseline, Meshcat)
-
-State x = [q_r (12 hand joints); q_o], q_o = [quaternion wxyz; position xyz] (nx = 19).
+  .venv/bin/python run_free.py scene    load/inspect the Free scene, show it in Meshcat
+  .venv/bin/python run_free.py traj     one DDP trajectory optimization (N=10)
+  .venv/bin/python run_free.py mpc      closed-loop MPC (+ zero-input baseline, Meshcat)
+  
+--hand dg3fm or --hand allegro to select which URDF you want to use
 """
 import argparse
 import os
@@ -25,10 +25,7 @@ from run_rotz import INK, MUTED, SERIES, _fig, _plot_controls
 W_QUAT, W_POS = 400.0, 1e4            # W_o diagonal: quaternion [1], position [1/m^2]
 CFG = dict(
     rz.CFG,
-    system="free",                    # free object, no support (scene.py)
-    build_dir="build/free",           # generated model files (separate from RotZ)
-    # [kg] no support: the fingers carry the whole weight. At 1 kg they must grip;
-    # at 0.1 kg smoothed forces alone hold the ball even with every tip > 3 mm away
+    system="free",                    
     obj_mass=1.0,
     hinge_damping=0.5,                # [N m s] object quasi-dynamic damping scale (no hinge here)
     u_max=0.2,                        # [rad] input bound (paper: 0.2 for the Free system)
@@ -36,10 +33,26 @@ CFG = dict(
     # W_o = diag over q_o: a yaw error e changes the quaternion by ~e/2, so
     # W_QUAT = 400 matches W_o = 100 / rad^2 on the yaw in run_rotz.
     w_obj=np.r_[W_QUAT * np.ones(4), W_POS * np.ones(3)],
-    mpc_steps=200,                    # closed-loop steps (20 s)
+    mpc_steps=150,                    # closed-loop steps (20 s)
 )
-NQ = scene.NU  # q_o = x[NQ:]
+# Free-specific overrides per hand (on top of rz.HAND_CFG).
+FREE_HAND_CFG = {
+    "dg3fm": dict(build_dir="build/free"),  # generated model files (separate from RotZ)
+    "allegro": dict(build_dir="build/allegro/free"),
+}
 # =============================================================================
+
+
+def select_hand(name):
+    """Switch scene.py and the configuration to hand `name`; q_o = x[NQ:]."""
+    global NQ
+    rz.select_hand(name)
+    rz.select_hand(name, CFG)
+    CFG.update(FREE_HAND_CFG[name])
+    NQ = scene.NU
+
+
+select_hand("dg3fm")
 
 
 def setup():
@@ -91,7 +104,7 @@ def cmd_scene(args):
     files, s, x0 = setup()
     p = s["plant"]
     print("generated model files:", *[f"  {k}: {v}" for k, v in files.items()], sep="\n")
-    print(f"\nplant: nq={p.num_positions()} nv={p.num_velocities()}; x = [12 hand joints; "
+    print(f"\nplant: nq={p.num_positions()} nv={p.num_velocities()}; x = [{NQ} hand joints; "
           f"quaternion wxyz; position xyz], nx = {len(x0)}")
     print(f"x0 object: q = {np.round(x0[NQ:NQ + 4], 4)}, p = {np.round(x0[NQ + 4:], 4)} m")
     print("\nsigned distances hand-object at x0 [mm]:")
@@ -121,7 +134,7 @@ def cmd_traj(args):
     print(f"object: max position error {1e3 * pos_err(X, x0).max():.2f} mm, "
           f"max tilt {np.degrees(tilt(X)).max():.2f} deg; max|u| = {np.abs(U).max():.4f} "
           f"<= {CFG['u_max']}; finite: {np.isfinite(X).all() and np.isfinite(U).all()}")
-    np.savez(os.path.join(CFG["results_dir"], "free_trajopt.npz"), X=X, U=U, X0=X0,
+    np.savez(rz.result_path(CFG, "free_trajopt.npz"), X=X, U=U, X0=X0,
              costs=info["costs"])
 
 
@@ -193,10 +206,10 @@ def cmd_mpc(args):
           f"solve time mean {1e3 * log['time'][1:].mean():.0f} ms, max {1e3 * log['time'].max():.0f} ms")
     reasons, counts = np.unique(log["reason"], return_counts=True)
     print("termination reasons:", dict(zip(reasons, counts.tolist())))
-    for j in range(3):
+    for j in scene.FINGERS:
         print(f"  tip {j + 1}: " + "".join("#" if v < 1e3 * CFG["contact_phi"] else "."
                                            for v in phi[:, j]))
-    np.savez(os.path.join(CFG["results_dir"], "free_mpc.npz"),
+    np.savez(rz.result_path(CFG, "free_mpc.npz"),
              **{f"mpc_{k}": v for k, v in log.items()},
              **{f"base_{k}": v for k, v in base.items()})
 
@@ -214,7 +227,7 @@ def cmd_mpc(args):
     ax[2].legend()
     ax[3].plot(t, tl, color=SERIES[0])
     ax[3].set_title("object tilt [deg]", color=INK, loc="left")
-    for f in range(3):
+    for f in scene.FINGERS:
         ax[4].plot(t[:-1], phi[:, f], color=SERIES[f], label=f"tip {f + 1}")
         ax[5].plot(t[:-1], log["f_tip"][:, f], color=SERIES[f], label=f"tip {f + 1}")
     ax[4].axhline(1e3 * CFG["contact_phi"], color=MUTED, ls="--", lw=1)
@@ -231,7 +244,7 @@ def cmd_mpc(args):
     ax[9].plot(t[:-1], 1e3 * log["time"], color=SERIES[0])
     ax[9].set_title("solve time [ms]", color=INK, loc="left")
     for a, j in ((ax[10], 1), (ax[11], 2)):
-        for f in range(3):
+        for f in scene.FINGERS:
             a.plot(t, log["x"][:, 4 * f + j], color=SERIES[f], label=f"finger {f + 1}")
         a.set_title(f"joint {j + 1} position [rad]", color=INK, loc="left")
     ax[10].legend()
@@ -239,7 +252,7 @@ def cmd_mpc(args):
         a.set_xlabel("time [s]")
     fig.suptitle("Free system, planner verification: MPC executed through the same smoothed "
                  "quasi-dynamic model (kappa = %g)" % CFG["kappa"], color=INK)
-    path = os.path.join(CFG["results_dir"], "free_mpc.png")
+    path = rz.result_path(CFG, "free_mpc.png")
     fig.savefig(path, dpi=130)
     print("saved", path)
     if not args.no_meshcat:
@@ -248,7 +261,7 @@ def cmd_mpc(args):
         scene.animate(sv, log["x"], h, CFG)
         print(f"Meshcat animation: {meshcat.web_url()}  (use the Animation controls to replay)\n"
               f"contact dots (tip within {1e3 * CFG['contact_phi']:.0f} mm): "
-              "finger 1 magenta, finger 2 orange, finger 3 yellow")
+              + rz.contact_dot_legend())
         input("press Enter to quit...")
 
 
@@ -256,8 +269,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["scene", "traj", "mpc"])
+    ap.add_argument("--hand", choices=list(FREE_HAND_CFG), default="dg3fm", help="hand model")
     ap.add_argument("--no-meshcat", action="store_true", help="skip Meshcat")
     args = ap.parse_args()
+    select_hand(args.hand)
     os.makedirs(CFG["results_dir"], exist_ok=True)
     {"scene": cmd_scene, "traj": cmd_traj, "mpc": cmd_mpc}[args.command](args)
 

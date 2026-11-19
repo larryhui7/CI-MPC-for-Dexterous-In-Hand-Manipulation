@@ -1,5 +1,6 @@
 """Contact model: smoothed CQDC dynamics (Eq. 2) via qsim_cpp"""
 import copy
+import os
 from types import SimpleNamespace
 import numpy as np
 import qsim_cpp
@@ -19,7 +20,15 @@ def make_model(cfg, files, kappa=None):
     p.forward_mode = qsim_cpp.ForwardDynamicsMode.kLogIcecream  # analytically smoothed Eq. (2): log barrier on the friction cones
     p.gradient_mode = qsim_cpp.GradientMode.kNone  # set per call in step()
     p.calc_contact_forces = False  # set per call in step()
-    p.use_free_solvers = True  # no commercial licence: SCS for the phase-1 SOCP
+    # Solver for the phase-1 SOCP (and the exact, unsmoothed SOCP): SCS, or MOSEK
+    # with cfg["use_mosek"]. Drake enables MOSEK only if MOSEKLM_LICENSE_FILE is
+    # set; default to the standard licence location.
+    if cfg.get("use_mosek"):
+        os.environ.setdefault("MOSEKLM_LICENSE_FILE",
+                              os.path.expanduser("~/mosek/mosek.lic"))
+        assert os.path.isfile(os.environ["MOSEKLM_LICENSE_FILE"]), \
+            f"MOSEK licence not found: {os.environ['MOSEKLM_LICENSE_FILE']}"
+    p.use_free_solvers = not cfg.get("use_mosek")
     p.nd_per_contact = 4       # unused by icecream modes
     # Hand joints are position-controlled with stiffness Kp (stiff springs pulled to
     # q_cmd); the object is the only unactuated body.
@@ -29,7 +38,7 @@ def make_model(cfg, files, kappa=None):
     ia, iu = sim.get_q_a_indices_into_q(), sim.get_q_u_indices_into_q()
     n_v_o = scene.n_v_object(cfg)  # 1 (RotZ hinge) or 6 (Free body)
     assert (sim.num_actuated_dofs(), sim.num_unactuated_dofs()) == (scene.NU, n_v_o), \
-        f"expected 12 actuated hand joints + {n_v_o} unactuated object dofs"
+        f"expected {scene.NU} actuated hand joints + {n_v_o} unactuated object dofs"
     perm = np.concatenate([ia, iu])  # x[i] = q_qsim[perm[i]]
     return SimpleNamespace(sim=sim, params=p, perm=perm, h=cfg["h"])
 

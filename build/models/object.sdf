@@ -19,6 +19,21 @@
         <geometry><sphere><radius>0.04</radius></sphere></geometry>
         <material><diffuse>0.2 0.4 0.9 0.6</diffuse></material>
       </visual>
+      <visual name="axis_x">
+        <pose>0.025 0.0 0.0 0 0 0</pose>
+        <geometry><box><size>0.05 0.0032 0.0032</size></box></geometry>
+        <material><diffuse>0.9 0.1 0.1 1</diffuse></material>
+      </visual>
+      <visual name="axis_y">
+        <pose>0.0 0.025 0.0 0 0 0</pose>
+        <geometry><box><size>0.0032 0.05 0.0032</size></box></geometry>
+        <material><diffuse>0.1 0.7 0.1 1</diffuse></material>
+      </visual>
+      <visual name="axis_z">
+        <pose>0.0 0.0 0.025 0 0 0</pose>
+        <geometry><box><size>0.0032 0.0032 0.05</size></box></geometry>
+        <material><diffuse>0.1 0.2 0.9 1</diffuse></material>
+      </visual>
     </link>
     <!-- Unactuated: effort 0 => Drake attaches no actuator to this joint. -->
     <joint name="object_yaw" type="revolute">
